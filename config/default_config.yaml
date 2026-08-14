@@ -1,0 +1,99 @@
+# ChunkGuard — Default Configuration
+# This file documents all available configuration options with their defaults.
+# Copy to ./chunkguard.yaml and customize as needed.
+
+# ─── Download Settings ─────────────────────────────────────────────
+download:
+  # Size of each chunk. Supports units: B, KB, MB, GB
+  # Range: 1MB – 256MB
+  # Smaller = more granular retry, more overhead
+  # Larger = less overhead, more data to re-download on failure
+  chunk_size: "8MB"
+
+  # Number of parallel download workers (concurrent HTTP connections)
+  # Range: 1 – 32
+  # More workers = faster downloads, but may trigger server rate limits
+  max_parallel_workers: 4
+
+  # Perform whole-file SHA-256 verification after chunk assembly
+  verify_on_complete: true
+
+  # Delete chunk files after successful assembly
+  cleanup_chunks_on_complete: true
+
+  # Check available disk space before starting download
+  # Requires approximately 2x file size during download
+  pre_check_disk_space: true
+
+# ─── Network Settings ──────────────────────────────────────────────
+network:
+  # TCP connection timeout in seconds
+  connect_timeout: 30
+
+  # Time to wait for data after connection is established, in seconds
+  read_timeout: 300
+
+  # Maximum number of HTTP redirects to follow
+  max_redirects: 5
+
+  # HTTP User-Agent header
+  user_agent: "ChunkGuard/1.0"
+
+  # Enable HTTP/2 protocol (recommended for multiplexing)
+  http2: true
+
+  # Verify TLS/SSL certificates (STRONGLY recommended to keep true)
+  verify_ssl: true
+
+  # Maximum download bandwidth in bytes per second
+  # 0 = unlimited
+  # Example: 10485760 = 10 MB/s
+  max_bandwidth: 0
+
+# ─── Retry Settings ────────────────────────────────────────────────
+retry:
+  # Maximum number of attempts per chunk (including the first attempt)
+  # After this many failures, the chunk is marked ABANDONED
+  max_attempts: 3
+
+  # Base delay before the first retry (seconds)
+  base_delay: 1.0
+
+  # Maximum delay between retries (seconds)
+  # Delay grows exponentially but is capped at this value
+  max_delay: 60.0
+
+  # Multiplier applied to delay on each successive retry
+  # delay = base_delay * (backoff_factor ^ attempt_number)
+  backoff_factor: 2.0
+
+  # Random jitter added to delay as a fraction of the computed delay
+  # Prevents thundering herd when multiple workers retry simultaneously
+  # jitter = uniform(0, jitter_factor * computed_delay)
+  jitter_factor: 0.5
+
+# ─── Logging Settings ──────────────────────────────────────────────
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "INFO"
+
+  # Log format: "json" (structured, machine-readable) or "text" (human-readable)
+  format: "json"
+
+  # Path to log file. null = log to stderr only
+  file: null
+
+# ─── Progress Display Settings ─────────────────────────────────────
+progress:
+  # Minimum interval between progress bar updates (seconds)
+  update_interval: 0.5
+
+  # Show current and average download speed
+  show_speed: true
+
+  # Show estimated time remaining
+  show_eta: true
+
+  # Show individual chunk download/verification events
+  # Useful for debugging, noisy for normal use
+  show_chunk_details: false
