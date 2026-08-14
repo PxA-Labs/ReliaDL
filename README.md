@@ -1,6 +1,6 @@
 # ReliaDL — Fault-Tolerant Chunked File Download System
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Status: Production](https://img.shields.io/badge/Status-Production-green.svg)]()
 [![Version: 1.0.0](https://img.shields.io/badge/Version-1.0.0-orange.svg)]()
 
@@ -118,4 +118,4 @@ python -m src.main verify \
 
 ## 📄 License
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 — see the [LICENSE](LICENSE) file for details.
