@@ -1,0 +1,44 @@
+name: PR Quality Checks
+
+on:
+  pull_request:
+    branches:
+      - master
+    types: [opened, edited, synchronized, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  validate-metadata-and-novelty:
+    name: Validate Title, Description, and Novelty
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Run Metadata & Novelty Validation Script
+        run: |
+          python scripts/verify_novelty.py
+
+  run-tests:
+    name: Verify Test Cases
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Run Unit Tests
+        run: |
+          python -m unittest discover -s tests -p "test_*.py"
