@@ -1,4 +1,4 @@
-# ReliaDL: Fault-Tolerant Chunked File Download System
+# ChunkGuard: Fault-Tolerant Chunked File Download System
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Status: Production](https://img.shields.io/badge/Status-Production-green.svg)]()
@@ -8,9 +8,9 @@
 
 ## Overview
 
-**ReliaDL** is a production-grade, fault-tolerant file download system designed to transfer large files reliably over unstable or high-latency network connections. The system partitions large payloads into independently verifiable chunks, executing concurrent transfers using HTTP Range requests while guaranteeing byte-level integrity via cryptographic SHA-256 hashing.
+**ChunkGuard** is a production-grade, fault-tolerant file download system designed to transfer large files reliably over unstable or high-latency network connections. The system partitions large payloads into independently verifiable chunks, executing concurrent transfers using HTTP Range requests while guaranteeing byte-level integrity via cryptographic SHA-256 hashing.
 
-In the event of network disruption or data corruption, ReliaDL pinpoints the specific affected chunk and re-downloads only that segment, eliminating the need to restart entire transfers.
+In the event of network disruption or data corruption, ChunkGuard pinpoints the specific affected chunk and re-downloads only that segment, eliminating the need to restart entire transfers.
 
 ### Key Features
 
@@ -27,7 +27,7 @@ In the event of network disruption or data corruption, ReliaDL pinpoints the spe
 ## Repository Structure
 
 ```
-ReliaDL/
+ChunkGuard/
 ├── README.md                          # Project documentation entry point
 ├── LICENSE                            # Apache 2.0 License
 │
@@ -78,8 +78,8 @@ ReliaDL/
 
 ```bash
 # Clone repository
-git clone https://github.com/PxA-Labs/ReliaDL.git
-cd ReliaDL
+git clone https://github.com/PxA-Labs/ChunkGuard.git
+cd ChunkGuard
 
 # Install dependencies
 pip install -r requirements.txt
@@ -95,7 +95,7 @@ python -m src.main download \
 
 # Resume an interrupted transfer
 python -m src.main resume \
-  --state-file "./downloads/.reliadl/distribution-image.iso.state"
+  --state-file "./downloads/.chunkguard/distribution-image.iso.state"
 
 # Verify payload checksum against expected hash
 python -m src.main verify \

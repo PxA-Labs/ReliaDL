@@ -16,7 +16,7 @@ Traditional download tools download files as a single stream. If the download is
 Python 3.10+, using asyncio for concurrent downloads and the standard library's `hashlib` for SHA-256 hashing.
 
 ### Is ChunkGuard free?
-Yes. ReliaDL is released under the Apache License 2.0 — free for personal and commercial use with built-in patent protection.
+Yes. ChunkGuard is released under the Apache License 2.0 — free for personal and commercial use with built-in patent protection.
 
 ---
 
