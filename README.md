@@ -1,6 +1,8 @@
 # ChunkGuard: Fault-Tolerant Chunked File Download System
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/PxA-Labs/ReliaDL/badge)](https://securityscorecards.dev/viewer/?url=github.com/PxA-Labs/ReliaDL)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/1/badge)](https://www.bestpractices.dev/)
 [![Status: Production](https://img.shields.io/badge/Status-Production-green.svg)]()
 [![Version: 1.0.0](https://img.shields.io/badge/Version-1.0.0-orange.svg)]()
 
@@ -123,6 +125,19 @@ python -m src.main verify \
 | [Contributing](docs/CONTRIBUTING.md) | Contributors | Development setup, code guidelines, and pull request procedures |
 | [Glossary](docs/GLOSSARY.md) | All Readers | Index of technical terms and acronyms |
 | [FAQ](docs/FAQ.md) | All Readers | Answers to common technical and operational questions |
+
+---
+
+## Security & OpenSSF Compliance
+
+ChunkGuard adheres to the [Open Source Security Foundation (OpenSSF)](https://openssf.org/) Best Practices and Scorecard standards:
+
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/PxA-Labs/ReliaDL/badge)](https://securityscorecards.dev/viewer/?url=github.com/PxA-Labs/ReliaDL)
+
+* **Cryptographic Verification**: Dual-tier SHA-256 and binary Merkle Tree validation against tampered payloads.
+* **Supply Chain Security**: Pinned GitHub Actions dependencies, strict branch protection rules, and signed manifest catalogs.
+* **Vulnerability Disclosure**: Coordinated security response process documented in [SECURITY.md](docs/SECURITY.md).
+* **Automated CI Gates**: Automated novelty scanning, type checking, and unit test enforcement on all pull requests.
 
 ---
 
