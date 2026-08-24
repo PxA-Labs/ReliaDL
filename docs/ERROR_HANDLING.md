@@ -33,12 +33,28 @@ ChunkGuardError (base)
 │       ├── ClientError (4xx)
 │       │   Description: Client-side request problem
 │       │   Retryable:   No (except 408, 429)
-│       │   Examples:     404 Not Found, 403 Forbidden, 401 Unauthorized
+│       │   Examples:     404 Not Found, 403 Forbidden, 401 Unauthorized, 412 Precondition Failed
 │       │
 │       └── ServerError (5xx)
 │           Description: Server-side processing problem
 │           Retryable:   Yes
 │           Examples:     500 Internal Error, 502 Bad Gateway, 503 Unavailable
+│
+├── ProxyError
+│   ├── ProxyConnectionError
+│   │   Description: Unable to establish tunnel through forward proxy
+│   │   Retryable:   Yes
+│   └── ProxyAuthenticationError
+│       Description: 407 Proxy Authentication Required
+│       Retryable:   No
+│
+├── ManifestError
+│   ├── ManifestSignatureMismatchError
+│   │   Description: Cryptographic signature over .cgmanifest failed validation
+│   │   Retryable:   No
+│   └── ManifestFormatError
+│       Description: .cgmanifest JSON schema validation failed
+│       Retryable:   No
 │
 ├── IntegrityError
 │   ├── ChunkHashMismatchError

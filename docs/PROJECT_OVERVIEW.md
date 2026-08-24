@@ -205,5 +205,7 @@ Imagine shipping a 1,000-page book across the country. The traditional approach 
 
 - **Users**: Read the [User Guide](USER_GUIDE.md) for step-by-step instructions
 - **Developers**: Read the [Architecture](ARCHITECTURE.md) and [Technical Specification](TECHNICAL_SPECIFICATION.md)
-- **Operations**: Read the [Deployment Guide](DEPLOYMENT_GUIDE.md)
+- **Protocol & Cloud Engineers**: Read [Manifest Specification](MANIFEST_SPECIFICATION.md) and [Cloud & Protocol Adapters](CLOUD_ADAPTERS.md)
+- **Operations & SREs**: Read the [Deployment Guide](DEPLOYMENT_GUIDE.md) and [Observability & Monitoring](OBSERVABILITY.md)
 - **Contributors**: Read the [Contributing Guide](CONTRIBUTING.md)
+- **AI Agents & Integrators**: Read the [AI Agents & Memory Guide](agents.md)

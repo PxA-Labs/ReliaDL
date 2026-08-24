@@ -46,8 +46,8 @@ pip install chunkguard
 ### 2.2 From Source
 
 ```bash
-git clone https://github.com/your-org/chunkguard.git
-cd chunkguard
+git clone https://github.com/PxA-Labs/ChunkGuard.git
+cd ChunkGuard
 pip install -e ".[dev]"
 ```
 
@@ -364,4 +364,63 @@ services:
         "${FILE_URL}"
         "/downloads/${FILE_NAME}"
     restart: "no"
+```
+
+### 7.4 Systemd Service Template
+
+```ini
+# /etc/systemd/system/chunkguard-batch.service
+[Unit]
+Description=ChunkGuard Automated Artifact Download Service
+After=network.target
+
+[Service]
+Type=oneshot
+User=chunkguard
+Group=chunkguard
+ExecStart=/usr/local/bin/chunkguard download \
+  --config /etc/chunkguard/config.yaml \
+  --url "https://releases.example.com/dataset.parquet" \
+  --output "/data/datasets/dataset.parquet"
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### 7.5 Kubernetes Batch Job
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chunkguard-artifact-sync
+spec:
+  template:
+    spec:
+      containers:
+        - name: chunkguard
+          image: ghcr.io/pxa-labs/chunkguard:1.0.0
+          args:
+            - "download"
+            - "--config"
+            - "/etc/chunkguard/chunkguard.yaml"
+            - "--url"
+            - "https://models.internal/weights.safetensors"
+            - "--output"
+            - "/models/weights.safetensors"
+          volumeMounts:
+            - name: model-storage
+              mountPath: /models
+            - name: config-volume
+              mountPath: /etc/chunkguard
+      restartPolicy: OnFailure
+      volumes:
+        - name: model-storage
+          persistentVolumeClaim:
+            claimName: model-pvc
+        - name: config-volume
+          configMap:
+            name: chunkguard-config
 ```

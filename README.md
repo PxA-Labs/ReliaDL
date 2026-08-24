@@ -39,6 +39,9 @@ ChunkGuard/
 │   ├── DATA_FLOW.md                   # State machine diagrams & data path sequences
 │   ├── ERROR_HANDLING.md              # Error taxonomy & recovery strategies
 │   ├── SECURITY.md                    # Security analysis & threat model
+│   ├── MANIFEST_SPECIFICATION.md      # Chunk manifest (.cgmanifest) & Merkle tree spec
+│   ├── CLOUD_ADAPTERS.md              # AWS S3, GCS, Azure Blob, & proxy protocol adapters
+│   ├── OBSERVABILITY.md               # Prometheus metrics, OpenTelemetry, & logging
 │   ├── DEPLOYMENT_GUIDE.md            # Installation, configuration, & operations
 │   ├── USER_GUIDE.md                  # Comprehensive end-user guide
 │   ├── TESTING_STRATEGY.md            # Test plans, benchmarks, & coverage targets
@@ -46,7 +49,8 @@ ChunkGuard/
 │   ├── CONTRIBUTING.md                # Developer contribution standards
 │   ├── CHANGELOG.md                   # Version history
 │   ├── GLOSSARY.md                    # Terminology index
-│   └── FAQ.md                         # Frequently asked questions
+│   ├── FAQ.md                         # Frequently asked questions
+│   └── agents.md                      # AI agents & Mem0 memory configuration
 │
 ├── src/                               # System implementation
 │   ├── chunk_manager.py               # Chunk partitioning & boundary logic
@@ -116,11 +120,15 @@ python -m src.main verify \
 | [Data Flow](docs/DATA_FLOW.md) | Core Maintainers | State transition models and execution sequence diagrams |
 | [Error Handling](docs/ERROR_HANDLING.md) | Systems & Reliability Engineers | Comprehensive exception taxonomy and fault escalation rules |
 | [Security](docs/SECURITY.md) | Security Analysts & Auditors | Threat model, cryptographic assurances, and mitigations |
+| [Manifest Specification](docs/MANIFEST_SPECIFICATION.md) | Systems Engineers & Auditors | Formal specification of `.cgmanifest`, Merkle trees, and signed catalogs |
+| [Cloud & Protocol Adapters](docs/CLOUD_ADAPTERS.md) | Cloud Architects & DevOps | AWS S3, GCS, Azure Blob, SOCKS5/HTTP proxies, and HTTP/3 QUIC |
+| [Observability & Monitoring](docs/OBSERVABILITY.md) | SREs & Platform Engineers | Prometheus metrics catalog, OpenTelemetry tracing, and Grafana alerting |
 | [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) | DevOps & SREs | Operations, environment setup, and monitoring integration |
 | [User Guide](docs/USER_GUIDE.md) | End Users & Automation Engineers | Detailed command syntax and workflow examples |
 | [Testing Strategy](docs/TESTING_STRATEGY.md) | QA & Test Engineers | Test suite structure, fault injection, and coverage goals |
 | [Performance](docs/PERFORMANCE.md) | Performance Engineers | Benchmarks, memory profile, and tuning strategies |
 | [Contributing](docs/CONTRIBUTING.md) | Contributors | Development setup, code guidelines, and pull request procedures |
+| [AI Agents & Memory](docs/agents.md) | AI Engineers & Agent Developers | Mem0 memory configuration, persistent context, and agent workflows |
 | [Glossary](docs/GLOSSARY.md) | All Readers | Index of technical terms and acronyms |
 | [FAQ](docs/FAQ.md) | All Readers | Answers to common technical and operational questions |
 

@@ -866,3 +866,45 @@ OUTPUT_FILE_PERMISSIONS = None  # Use system default
 - Files > 2 GB: Supported on all 64-bit platforms
 - Files > 4 GB: Requires 64-bit Python and file system support (NTFS, ext4, APFS)
 - Maximum tested file size: 1 TB
+
+---
+
+## 13. Direct Sparse File Writing Specification
+
+When `--direct-write` is enabled, ChunkGuard bypasses the temporary chunk file staging directory and directly writes verified byte buffers into pre-allocated sparse target files:
+
+### 13.1 Pre-Allocation Protocol
+1. **POSIX Systems (Linux/macOS)**: Uses `posix_fallocate(fd, 0, file_size)` to allocate contiguous disk blocks and prevent mid-transfer disk-full crashes (`ENOSPC`).
+2. **Windows (NTFS)**: Uses Win32 `SetFileInformationByHandle` or `SetFileValidData` for fast uninitialized file pre-allocation.
+
+### 13.2 Concurrent Direct Writing (`os.pwrite`)
+Each worker writes directly to its chunk offset using positional write operations:
+
+```python
+def write_chunk_direct(fd: int, start_byte: int, data: bytes) -> int:
+    """
+    Thread-safe / Coroutine-safe positional write.
+    Does not modify the shared file descriptor seek pointer.
+    """
+    return os.pwrite(fd, data, start_byte)
+```
+
+---
+
+## 14. Bandwidth Throttling Specification (Token Bucket)
+
+### 14.1 Mathematical Model
+Let $R$ be the configured rate limit (bytes/sec) and $C = 2 \times R$ be the bucket capacity.
+* At time $t$, elapsed time $\Delta t = t - t_{\text{last}}$.
+* Tokens added: $T_{\text{new}} = \min(C, T_{\text{current}} + R \cdot \Delta t)$.
+* For a chunk read request of size $B$ bytes:
+  * If $T_{\text{new}} \ge B$: consume $B$ tokens and return immediately.
+  * If $T_{\text{new}} < B$: compute required sleep duration $\Delta t_{\text{sleep}} = \frac{B - T_{\text{new}}}{R}$, await `asyncio.sleep(sleep_time)`, and consume $B$ tokens.
+
+---
+
+## 15. Cross-References
+
+* For full Manifest details: see [MANIFEST_SPECIFICATION.md](MANIFEST_SPECIFICATION.md)
+* For Cloud Protocol Adapters: see [CLOUD_ADAPTERS.md](CLOUD_ADAPTERS.md)
+* For Telemetry & Tracing: see [OBSERVABILITY.md](OBSERVABILITY.md)

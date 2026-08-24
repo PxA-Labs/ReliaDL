@@ -490,9 +490,64 @@ Worker picks up chunk from queue
             NO        YES
              │         │
              ▼         ▼
-         Continue   Mark download
-         (other     as FAILED
-         chunks     Notify user
-         may        via callback
-         succeed)   & exit code
+          Continue   Mark download
+          (other     as FAILED
+          chunks     Notify user
+          may        via callback
+          succeed)   & exit code
+```
+
+---
+
+## 7. Direct Sparse Write Data Flow
+
+```
+Download Initialized (--direct-write)
+       │
+       ▼
+[ Pre-allocate target file ] ──▶ posix_fallocate(fd, 0, file_size)
+       │
+       ▼
+[ Launch Worker Coroutines ]
+       │
+       ├── Worker 0 ──▶ fetch chunk 0 ──▶ verify SHA-256 ──▶ os.pwrite(fd, buf, 0)
+       ├── Worker 1 ──▶ fetch chunk 1 ──▶ verify SHA-256 ──▶ os.pwrite(fd, buf, 8388608)
+       └── Worker N ──▶ fetch chunk N ──▶ verify SHA-256 ──▶ os.pwrite(fd, buf, offset_N)
+       │
+       ▼
+[ All Chunks Verified & Written ]
+       │
+       ▼
+[ os.fsync(fd) & Whole-File SHA-256 Check ]
+       │
+       ▼
+[ Download Complete — Zero Assembly Delay ]
+```
+
+---
+
+## 8. Manifest-Driven Verification Flow
+
+```
+[ User provides .cgmanifest ]
+       │
+       ▼
+[ Verify Cryptographic Signature (Ed25519) ]
+       │
+       ├── ❌ Signature Invalid ──▶ Abort (Untrusted Manifest)
+       └── ✅ Signature Valid   ──▶ Load pre-authenticated chunk hashes & mirrors
+                                          │
+                                          ▼
+                             [ Concurrent Range GETs ]
+                             [ across prioritized mirrors ]
+                                          │
+                                          ▼
+                             [ Per-chunk SHA-256 checked ]
+                             [ against signed manifest ]
+                                          │
+                                          ▼
+                             [ Match Merkle Tree Root ]
+                                          │
+                                          ▼
+                             [ Success — Cryptographic Proof ]
 ```

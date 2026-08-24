@@ -56,11 +56,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Data Flow & State Machine
 - Error Handling & Recovery
 - Security Considerations
+- Manifest Specification (.cgmanifest & Merkle trees)
+- Cloud Storage & Protocol Adapters (AWS S3, GCS, Azure Blob, Proxies, HTTP/3)
+- Observability, Metrics & Monitoring (Prometheus & OpenTelemetry)
 - Deployment & Operations Guide
 - User Guide
 - Testing Strategy
 - Performance Benchmarks
 - Contributing Guide
+- AI Agents & Mem0 Memory Management Guide
 - Glossary
 - FAQ
 
