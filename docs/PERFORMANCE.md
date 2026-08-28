@@ -1,4 +1,4 @@
-# Performance — ChunkGuard
+# Performance — ReliaDL
 
 > **Audience**: Engineers, Operations
 > **Reading time**: ~8 minutes
@@ -283,3 +283,4 @@ network:
 During download:  2.1 × file_size  (chunks + partial output + state)
 After completion:  1.0 × file_size  (output only, chunks cleaned up)
 ```
+
