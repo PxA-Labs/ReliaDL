@@ -1,4 +1,4 @@
-# Changelog — ChunkGuard
+# Changelog — ReliaDL
 
 All notable changes to this project will be documented in this file.
 
@@ -76,3 +76,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Removed** — removed features
 - **Fixed** — bug fixes
 - **Security** — vulnerability fixes
+

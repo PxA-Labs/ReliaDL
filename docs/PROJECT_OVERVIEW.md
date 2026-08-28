@@ -1,19 +1,19 @@
-# Project Overview — ChunkGuard
+# Project Overview — ReliaDL
 
 > **Audience**: Everyone (stakeholders, product managers, executives, developers, end-users)
 > **Reading time**: ~10 minutes
 
 ---
 
-## 1. What Is ChunkGuard?
+## 1. What Is ReliaDL?
 
-ChunkGuard is a **fault-tolerant file download system** designed to reliably transfer large files over unreliable networks. Instead of downloading a file as a single monolithic stream — where any interruption means starting over — ChunkGuard divides the file into small, independently verifiable **chunks**, downloads them in parallel, and reassembles them into the original file with cryptographic proof that every byte is correct.
+ReliaDL is a **fault-tolerant file download system** designed to reliably transfer large files over unreliable networks. Instead of downloading a file as a single monolithic stream — where any interruption means starting over — ReliaDL divides the file into small, independently verifiable **chunks**, downloads them in parallel, and reassembles them into the original file with cryptographic proof that every byte is correct.
 
 ### The Problem We Solve
 
 Downloading large files (operating system images, datasets, backups, media libraries) over the internet is fragile:
 
-| Problem | Traditional Downloader | ChunkGuard |
+| Problem | Traditional Downloader | ReliaDL |
 |---|---|---|
 | Network drops mid-download | Restart from 0% | Resume from where it stopped |
 | Downloaded file is silently corrupted | No detection until you try to use it | Every chunk is hash-verified on arrival |
@@ -23,16 +23,16 @@ Downloading large files (operating system images, datasets, backups, media libra
 
 ### Real-World Analogy
 
-Imagine shipping a 1,000-page book across the country. The traditional approach is to ship the entire book in one box — if the box is damaged, you resend the entire book. ChunkGuard is like shipping each chapter in its own sealed, numbered envelope with a tamper-evident seal. If envelope #7 is damaged, you only resend chapter 7. You can even ship multiple envelopes simultaneously via different routes.
+Imagine shipping a 1,000-page book across the country. The traditional approach is to ship the entire book in one box — if the box is damaged, you resend the entire book. ReliaDL is like shipping each chapter in its own sealed, numbered envelope with a tamper-evident seal. If envelope #7 is damaged, you only resend chapter 7. You can even ship multiple envelopes simultaneously via different routes.
 
 ---
 
-## 2. Why Does ChunkGuard Exist?
+## 2. Why Does ReliaDL Exist?
 
 ### Business Drivers
 
 1. **Bandwidth Cost Reduction**: Re-downloading only failed chunks (typically < 1% of total data) instead of entire files saves significant egress bandwidth costs.
-2. **Time Savings**: A 50 GB dataset that fails at 95% takes 47.5 GB to restart traditionally. ChunkGuard retries only the failed ~400 MB chunk.
+2. **Time Savings**: A 50 GB dataset that fails at 95% takes 47.5 GB to restart traditionally. ReliaDL retries only the failed ~400 MB chunk.
 3. **Reliability SLA Compliance**: Systems that depend on file delivery (CI/CD pipelines, data warehouses, content distribution) need guaranteed delivery.
 4. **User Experience**: End-users expect downloads to "just work" even on flaky connections (mobile, satellite, developing-market infrastructure).
 
@@ -50,7 +50,7 @@ Imagine shipping a 1,000-page book across the country. The traditional approach 
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        ChunkGuard Flow                          │
+│                        ReliaDL Flow                          │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  1. USER provides:  URL + expected file hash (optional)         │
@@ -207,3 +207,4 @@ Imagine shipping a 1,000-page book across the country. The traditional approach 
 - **Developers**: Read the [Architecture](ARCHITECTURE.md) and [Technical Specification](TECHNICAL_SPECIFICATION.md)
 - **Operations**: Read the [Deployment Guide](DEPLOYMENT_GUIDE.md)
 - **Contributors**: Read the [Contributing Guide](CONTRIBUTING.md)
+

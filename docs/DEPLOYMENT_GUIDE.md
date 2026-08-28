@@ -1,4 +1,4 @@
-# Deployment & Operations Guide — ChunkGuard
+# Deployment & Operations Guide — ReliaDL
 
 > **Audience**: DevOps Engineers, System Administrators
 > **Reading time**: ~10 minutes
@@ -40,14 +40,14 @@ After assembly and cleanup:
 ### 2.1 From PyPI (Recommended)
 
 ```bash
-pip install chunkguard
+pip install ReliaDL
 ```
 
 ### 2.2 From Source
 
 ```bash
-git clone https://github.com/your-org/chunkguard.git
-cd chunkguard
+git clone https://github.com/your-org/ReliaDL.git
+cd ReliaDL
 pip install -e ".[dev]"
 ```
 
@@ -56,14 +56,14 @@ pip install -e ".[dev]"
 ```dockerfile
 FROM python:3.12-slim
 
-RUN pip install --no-cache-dir chunkguard
+RUN pip install --no-cache-dir ReliaDL
 
-ENTRYPOINT ["chunkguard"]
+ENTRYPOINT ["ReliaDL"]
 ```
 
 ```bash
-docker build -t chunkguard .
-docker run -v /downloads:/downloads chunkguard download \
+docker build -t ReliaDL .
+docker run -v /downloads:/downloads ReliaDL download \
   --url "https://example.com/file.iso" \
   --output "/downloads/file.iso"
 ```
@@ -89,15 +89,15 @@ rich>=13.7.0              # Terminal progress bars & formatting
 Checked in order (first found wins):
 
 1. `--config` CLI flag
-2. `CHUNKGUARD_CONFIG` environment variable
-3. `./chunkguard.yaml` (current directory)
-4. `~/.config/chunkguard/config.yaml` (user config)
+2. `ReliaDL_CONFIG` environment variable
+3. `./ReliaDL.yaml` (current directory)
+4. `~/.config/ReliaDL/config.yaml` (user config)
 5. Built-in defaults
 
 ### 3.2 Production Configuration Example
 
 ```yaml
-# /etc/chunkguard/config.yaml — Production Configuration
+# /etc/ReliaDL/config.yaml — Production Configuration
 
 download:
   chunk_size: "16MB"                    # Larger chunks for stable networks
@@ -110,7 +110,7 @@ network:
   connect_timeout: 15                   # Faster failure detection
   read_timeout: 120                     # Shorter timeout for responsive servers
   max_redirects: 3
-  user_agent: "ChunkGuard/1.0 (Production)"
+  user_agent: "ReliaDL/1.0 (Production)"
   http2: true
   verify_ssl: true
   max_bandwidth: 0                      # No limit in production
@@ -125,7 +125,7 @@ retry:
 logging:
   level: "INFO"
   format: "json"
-  file: "/var/log/chunkguard/download.log"
+  file: "/var/log/ReliaDL/download.log"
 
 progress:
   update_interval: 1.0
@@ -138,20 +138,20 @@ progress:
 
 ```bash
 # Core settings
-export CHUNKGUARD_CHUNK_SIZE="16MB"
-export CHUNKGUARD_WORKERS=8
-export CHUNKGUARD_RETRIES=5
+export ReliaDL_CHUNK_SIZE="16MB"
+export ReliaDL_WORKERS=8
+export ReliaDL_RETRIES=5
 
 # Network
-export CHUNKGUARD_CONNECT_TIMEOUT=15
-export CHUNKGUARD_READ_TIMEOUT=120
-export CHUNKGUARD_VERIFY_SSL=true
-export CHUNKGUARD_HTTP2=true
+export ReliaDL_CONNECT_TIMEOUT=15
+export ReliaDL_READ_TIMEOUT=120
+export ReliaDL_VERIFY_SSL=true
+export ReliaDL_HTTP2=true
 
 # Logging
-export CHUNKGUARD_LOG_LEVEL=INFO
-export CHUNKGUARD_LOG_FORMAT=json
-export CHUNKGUARD_LOG_FILE=/var/log/chunkguard/download.log
+export ReliaDL_LOG_LEVEL=INFO
+export ReliaDL_LOG_FORMAT=json
+export ReliaDL_LOG_FILE=/var/log/ReliaDL/download.log
 ```
 
 ---
@@ -160,7 +160,7 @@ export CHUNKGUARD_LOG_FILE=/var/log/chunkguard/download.log
 
 ### 4.1 Log-Based Monitoring
 
-ChunkGuard emits structured JSON logs that integrate with any log aggregation system:
+ReliaDL emits structured JSON logs that integrate with any log aggregation system:
 
 **Key Log Events to Monitor**:
 
@@ -182,18 +182,18 @@ ChunkGuard emits structured JSON logs that integrate with any log aggregation sy
 
 | Metric | Type | Description |
 |---|---|---|
-| `chunkguard_downloads_total` | Counter | Total downloads attempted |
-| `chunkguard_downloads_completed` | Counter | Successfully completed downloads |
-| `chunkguard_downloads_failed` | Counter | Failed downloads |
-| `chunkguard_chunks_downloaded_total` | Counter | Total chunks downloaded |
-| `chunkguard_chunks_retried_total` | Counter | Chunks that required retry |
-| `chunkguard_chunks_abandoned_total` | Counter | Chunks that exceeded max retries |
-| `chunkguard_bytes_downloaded_total` | Counter | Total bytes transferred |
-| `chunkguard_download_duration_seconds` | Histogram | Download duration distribution |
-| `chunkguard_chunk_download_duration_seconds` | Histogram | Per-chunk duration |
-| `chunkguard_download_speed_bytes_per_second` | Gauge | Current download speed |
-| `chunkguard_hash_mismatches_total` | Counter | Hash verification failures |
-| `chunkguard_active_workers` | Gauge | Currently active download workers |
+| `ReliaDL_downloads_total` | Counter | Total downloads attempted |
+| `ReliaDL_downloads_completed` | Counter | Successfully completed downloads |
+| `ReliaDL_downloads_failed` | Counter | Failed downloads |
+| `ReliaDL_chunks_downloaded_total` | Counter | Total chunks downloaded |
+| `ReliaDL_chunks_retried_total` | Counter | Chunks that required retry |
+| `ReliaDL_chunks_abandoned_total` | Counter | Chunks that exceeded max retries |
+| `ReliaDL_bytes_downloaded_total` | Counter | Total bytes transferred |
+| `ReliaDL_download_duration_seconds` | Histogram | Download duration distribution |
+| `ReliaDL_chunk_download_duration_seconds` | Histogram | Per-chunk duration |
+| `ReliaDL_download_speed_bytes_per_second` | Gauge | Current download speed |
+| `ReliaDL_hash_mismatches_total` | Counter | Hash verification failures |
+| `ReliaDL_active_workers` | Gauge | Currently active download workers |
 
 ### 4.3 Example Grafana Dashboard Panels
 
@@ -218,16 +218,16 @@ ChunkGuard emits structured JSON logs that integrate with any log aggregation sy
 
 ```bash
 # Basic
-chunkguard download \
+ReliaDL download \
   "https://releases.example.com/app-v2.0.iso" \
   "/data/downloads/app-v2.0.iso"
 
 # Production (with hash, more workers, custom config)
-chunkguard download \
+ReliaDL download \
   --hash "sha256:e3b0c44298fc1c149afbf4c8996fb924..." \
   --workers 8 \
   --chunk-size 16MB \
-  --config /etc/chunkguard/config.yaml \
+  --config /etc/ReliaDL/config.yaml \
   "https://releases.example.com/app-v2.0.iso" \
   "/data/downloads/app-v2.0.iso"
 ```
@@ -236,26 +236,26 @@ chunkguard download \
 
 ```bash
 # Check status from state file
-chunkguard status /data/downloads/.chunkguard/app-v2.0.iso.state
+ReliaDL status /data/downloads/.ReliaDL/app-v2.0.iso.state
 
 # JSON output for scripting
-chunkguard status --json /data/downloads/.chunkguard/app-v2.0.iso.state
+ReliaDL status --json /data/downloads/.ReliaDL/app-v2.0.iso.state
 ```
 
 ### 5.3 Resuming After Failure
 
 ```bash
 # Resume with same settings
-chunkguard resume /data/downloads/.chunkguard/app-v2.0.iso.state
+ReliaDL resume /data/downloads/.ReliaDL/app-v2.0.iso.state
 
 # Resume with more workers
-chunkguard resume --workers 16 /data/downloads/.chunkguard/app-v2.0.iso.state
+ReliaDL resume --workers 16 /data/downloads/.ReliaDL/app-v2.0.iso.state
 ```
 
 ### 5.4 Post-Download Verification
 
 ```bash
-chunkguard verify \
+ReliaDL verify \
   /data/downloads/app-v2.0.iso \
   "e3b0c44298fc1c149afbf4c8996fb924..."
 ```
@@ -264,10 +264,10 @@ chunkguard verify \
 
 ```bash
 # Remove state and chunk files for a completed download
-rm -rf /data/downloads/.chunkguard/app-v2.0.iso.*
+rm -rf /data/downloads/.ReliaDL/app-v2.0.iso.*
 
 # Cleanup all completed state files (keeps failed for inspection)
-find /data/downloads/.chunkguard/ -name "*.state" -exec \
+find /data/downloads/.ReliaDL/ -name "*.state" -exec \
   sh -c 'grep -q "COMPLETE" "$1" && rm -rf "${1%.state}"*' _ {} \;
 ```
 
@@ -292,9 +292,9 @@ find /data/downloads/.chunkguard/ -name "*.state" -exec \
 
 ```bash
 # Enable verbose debug logging
-chunkguard download --verbose \
+ReliaDL download --verbose \
   "https://example.com/file.iso" \
-  "/data/file.iso" 2>&1 | tee /var/log/chunkguard/debug.log
+  "/data/file.iso" 2>&1 | tee /var/log/ReliaDL/debug.log
 ```
 
 ### 6.3 Network Diagnostics
@@ -326,7 +326,7 @@ EXPECTED_HASH="${ARTIFACT_SHA256}"
 
 echo "Downloading artifact for build ${BUILD_ID}..."
 
-chunkguard download \
+ReliaDL download \
   --hash "sha256:${EXPECTED_HASH}" \
   --workers 4 \
   --retries 5 \
@@ -340,8 +340,8 @@ echo "✅ Download complete and verified"
 ```yaml
 - name: Download large artifact
   run: |
-    pip install chunkguard
-    chunkguard download \
+    pip install ReliaDL
+    ReliaDL download \
       --hash "sha256:${{ env.ARTIFACT_HASH }}" \
       --workers 4 \
       "${{ env.ARTIFACT_URL }}" \
@@ -353,15 +353,16 @@ echo "✅ Download complete and verified"
 ```yaml
 services:
   downloader:
-    image: chunkguard:latest
+    image: ReliaDL:latest
     volumes:
       - ./downloads:/downloads
       - ./config:/config:ro
     command: >
       download
-        --config /config/chunkguard.yaml
+        --config /config/ReliaDL.yaml
         --hash "sha256:${FILE_HASH}"
         "${FILE_URL}"
         "/downloads/${FILE_NAME}"
     restart: "no"
 ```
+

@@ -1,4 +1,4 @@
-# Security Considerations — ChunkGuard
+# Security Considerations — ReliaDL
 
 > **Audience**: Security Engineers, Auditors, DevOps
 > **Reading time**: ~10 minutes
@@ -24,7 +24,7 @@
 │  TRUSTED BOUNDARY: Local System                                  │
 │                                                                  │
 │  ┌──────────────┐     ┌──────────────┐     ┌────────────────┐   │
-│  │ ChunkGuard   │     │ State Files  │     │ Chunk/Output   │   │
+│  │ ReliaDL   │     │ State Files  │     │ Chunk/Output   │   │
 │  │ Process      │     │ (.state)     │     │ Files          │   │
 │  └──────┬───────┘     └──────────────┘     └────────────────┘   │
 │         │                                                        │
@@ -231,9 +231,10 @@ Mitigation:
 
 ## 6. Compliance Notes
 
-| Standard | Relevance | ChunkGuard Compliance |
+| Standard | Relevance | ReliaDL Compliance |
 |---|---|---|
 | **FIPS 140-2** | Cryptographic module validation | Uses Python `hashlib` backed by OpenSSL (FIPS-validated builds available) |
 | **NIST SP 800-131A** | Cryptographic algorithm recommendations | SHA-256 is approved through 2030+ |
 | **SOC 2 Type II** | Security controls for data integrity | Per-chunk + whole-file verification; audit logging |
 | **GDPR** | Data protection | No PII stored; downloads are user-initiated; logs contain no PII |
+
