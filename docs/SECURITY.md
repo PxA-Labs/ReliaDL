@@ -60,6 +60,9 @@
 | T8 | Credential leakage in logs | Information Disclosure | Low | High | Headers with "auth"/"token"/"key" are redacted in logs |
 | T9 | Path traversal via server-provided filenames | Elevation | Low | High | Output paths are user-specified, never derived from server |
 | T10 | Symlink attacks in chunk directory | Elevation | Low | Medium | Resolve symlinks before writing, create dirs with restricted perms |
+| T11 | Manifest catalog tampering | Tampering | Low | High | Cryptographic signatures (Ed25519) + Merkle root verification |
+| T12 | Forward proxy credential interception | Information Disclosure | Low | High | HTTPS CONNECT end-to-end TLS tunnels |
+| T13 | Disk allocation exhaustion | Availability | Low | Medium | Pre-allocation check (`posix_fallocate`) and disk quotas |
 
 ---
 

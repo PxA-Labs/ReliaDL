@@ -126,3 +126,98 @@ Upon verification failure, the Chunk Manager transitions to the `LOCALIZING` sta
 
 To mitigate latency in high-loss environments, ReliaDL proactively injects lightweight XOR-based parity chunks. The parity injection rate $\rho$ is governed by a Gilbert-Elliott channel model estimator, distinguishing between "Good" and "Bad" network states. The `PARITY_RECOVERY` state allows zero-RTT recovery from parity, proceeding to backoff-based `RETRYING` only upon parity exhaustion.
 
+## 6. Error Propagation Flow
+
+```
+  Error occurs in Worker
+         │
+         ▼
+  ┌──────────────────────────────────┐
+  │  Classify error                  │
+  │  - Is it retryable?             │
+  │  - What's the HTTP status?       │
+  │  - What exception type?          │
+  └──────────┬───────────────────────┘
+             │
+        ┌────┴────┐
+        │         │
+   Retryable  Non-Retryable
+        │         │
+        ▼         ▼
+   Increment   Mark chunk
+   attempt     ABANDONED
+   counter         │
+        │         ▼
+        ▼    Log error with
+   Compute   full context
+   backoff       │
+   delay         ▼
+        │    Check: are ALL
+        ▼    chunks ABANDONED?
+   Sleep &       │
+   retry    ┌────┴────┐
+             │         │
+            NO        YES
+             │         │
+             ▼         ▼
+          Continue   Mark download
+          (other     as FAILED
+          chunks     Notify user
+          may        via callback
+          succeed)   & exit code
+```
+
+---
+
+## 7. Direct Sparse Write Data Flow
+
+```
+Download Initialized (--direct-write)
+       │
+       ▼
+[ Pre-allocate target file ] ──▶ posix_fallocate(fd, 0, file_size)
+       │
+       ▼
+[ Launch Worker Coroutines ]
+       │
+       ├── Worker 0 ──▶ fetch chunk 0 ──▶ verify SHA-256 ──▶ os.pwrite(fd, buf, 0)
+       ├── Worker 1 ──▶ fetch chunk 1 ──▶ verify SHA-256 ──▶ os.pwrite(fd, buf, 8388608)
+       └── Worker N ──▶ fetch chunk N ──▶ verify SHA-256 ──▶ os.pwrite(fd, buf, offset_N)
+       │
+       ▼
+[ All Chunks Verified & Written ]
+       │
+       ▼
+[ os.fsync(fd) & Whole-File SHA-256 Check ]
+       │
+       ▼
+[ Download Complete — Zero Assembly Delay ]
+```
+
+---
+
+## 8. Manifest-Driven Verification Flow
+
+```
+[ User provides .cgmanifest ]
+       │
+       ▼
+[ Verify Cryptographic Signature (Ed25519) ]
+       │
+       ├── ❌ Signature Invalid ──▶ Abort (Untrusted Manifest)
+       └── ✅ Signature Valid   ──▶ Load pre-authenticated chunk hashes & mirrors
+                                          │
+                                          ▼
+                             [ Concurrent Range GETs ]
+                             [ across prioritized mirrors ]
+                                          │
+                                          ▼
+                             [ Per-chunk SHA-256 checked ]
+                             [ against signed manifest ]
+                                          │
+                                          ▼
+                             [ Match Merkle Tree Root ]
+                                          │
+                                          ▼
+                             [ Success — Cryptographic Proof ]
+```

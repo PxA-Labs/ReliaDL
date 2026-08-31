@@ -489,6 +489,10 @@ pytest tests/unit/test_chunk_manager.py::TestChunkComputation::test_exact_divisi
 | `state_manager.py` | 90% | 85% |
 | `download_engine.py` | 85% | 80% |
 | `file_assembler.py` | 90% | 85% |
+| `sparse_writer.py` | 95% | 90% |
+| `rate_limiter.py` | 95% | 90% |
+| `manifest.py` | 95% | 90% |
+| `adapters/` | 90% | 85% |
 | **Overall** | **90%** | **80%** |
 
 ### 7.3 CI Pipeline

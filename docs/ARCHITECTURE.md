@@ -400,6 +400,68 @@ Assembly:
 
 ---
 
+### 3.9 Direct Sparse File Writer (`sparse_writer.py`)
+
+**Responsibility**: Enable zero-assembly, direct-offset writing to eliminate temporary disk overhead and assembly phase duration.
+
+```
+Option A: Staged Chunk Files (Default)
+  Download ──▶ Staged Chunks (.chunkguard/*.chunk) ──▶ Sequential Assembly ──▶ Final Output
+  Storage Required: 2.1 × File Size (during download)
+
+Option B: Direct Sparse Writing (Enabled via --direct-write)
+  Download ──▶ Pre-allocate File (posix_fallocate) ──▶ Concurrent os.pwrite() at Offsets ──▶ Final Output
+  Storage Required: 1.0 × File Size (zero assembly latency)
+```
+
+| Strategy | Advantages | Trade-offs |
+|---|---|---|
+| **Staged Chunks** | Simple crash recovery; works on all filesystems (including FAT32) | Requires 2.1× disk space; requires sequential assembly pass |
+| **Direct Sparse Write** | 1.0× disk space; zero assembly time post-download; NVMe-optimized | Requires sparse/pwrite filesystem support (POSIX `posix_fallocate` / Windows `SetFileValidData`) |
+
+---
+
+### 3.10 Bandwidth Throttling Subsystem (`rate_limiter.py`)
+
+**Responsibility**: Enforce network egress/ingress bandwidth ceilings to avoid saturating shared links.
+
+* **Algorithm**: Token Bucket with millisecond-resolution replenishment.
+* **Granularity**: Shared across all concurrent coroutine workers.
+* **Zero Busy-Waiting**: Coroutines await `asyncio.sleep()` when bucket tokens are depleted.
+
+```
+       Token Generator (Rate R bytes/sec)
+                      │
+                      ▼
+            ┌──────────────────┐
+            │   Token Bucket   │ ◄── Capacity C bytes (Burst limit)
+            └─────────┬────────┘
+                      │
+        Tokens granted per chunk read buffer (64 KB)
+                      │
+                      ▼
+         [ Coroutine Worker 0..N ]
+```
+
+---
+
+### 3.11 Cloud & Protocol Adapters (`adapters/`)
+
+**Responsibility**: Abstract transport protocol specifics behind a unified async interface (`BaseStorageAdapter`).
+
+* **AWS S3 Adapter**: AWS SigV4 signed Range GETs, multipart awareness, IAM role authentication.
+* **GCS Adapter**: Google Cloud Storage Range requests with OAuth2 and Application Default Credentials.
+* **Azure Blob Adapter**: Azure REST `x-ms-range` requests with SAS tokens and Managed Identity.
+* **Proxy Tunneling**: HTTP `CONNECT` and SOCKS5 (RFC 1928) tunneling with custom CA certificates.
+
+---
+
+### 3.12 Manifest & Merkle Verification Engine (`manifest.py`)
+
+**Responsibility**: Parse, validate, and verify signed `.cgmanifest` catalogs and compute binary Merkle Trees for streaming chunk authentication.
+
+---
+
 ## 4. Cross-Cutting Concerns
 
 ### 4.1 Data Models (`models.py`)
@@ -511,6 +573,8 @@ Structured JSON logging via `structlog`:
 | D5 | Per-chunk hash in manifest | Hash only whole file | Enables selective re-download; pinpoints corruption location |
 | D6 | Atomic state file writes | Append-only log, database | Simple; crash-safe; no external dependencies |
 | D7 | HTTP Range requests | Custom chunking protocol | Works with any standard HTTP server; CDN-compatible |
+| D8 | Dual storage modes (Staged vs Direct Sparse) | Single storage backend | Allows low-memory systems (direct sparse) and legacy filesystems (staged chunks) |
+| D9 | Token Bucket for rate limiting | Leaky Bucket, TCP window throttling | Allows smooth bursts up to bucket capacity while enforcing strict average bandwidth limits |
 
 ---
 

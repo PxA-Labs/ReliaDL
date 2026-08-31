@@ -217,8 +217,8 @@ class DownloadConfig:
     progress_update_interval_seconds: float = 0.5
     """Minimum interval between progress callbacks."""
     
-    # Network
-    user_agent: str = "ReliaDL/1.0"
+    # Network & Transport
+    user_agent: str = "ChunkGuard/1.0"
     """HTTP User-Agent header value."""
     
     max_bandwidth_bytes_per_sec: int = 0
@@ -232,6 +232,15 @@ class DownloadConfig:
     
     max_redirects: int = 5
     """Maximum number of HTTP redirects to follow."""
+    
+    proxy_url: str | None = None
+    """HTTP/HTTPS/SOCKS5 proxy URL."""
+    
+    direct_write: bool = False
+    """Enable direct-write sparse allocation to avoid staged chunk files."""
+    
+    manifest_path: str | None = None
+    """Path to .cgmanifest file for pre-authenticated chunk downloading."""
     
     def validate(self) -> None:
         """Validate configuration values. Raises ConfigurationError on invalid values."""
@@ -453,14 +462,18 @@ Usage: ReliaDL download [OPTIONS] URL OUTPUT
   Download a file with chunked verification.
 
 Arguments:
-  URL     Source URL (HTTP/HTTPS)
+  URL     Source URL (HTTP/HTTPS/S3/GCS/Azure)
   OUTPUT  Output file path
 
 Options:
   --hash TEXT               Expected SHA-256 hash for verification
+  --manifest PATH           Drive download using signed .cgmanifest file
   --chunk-size TEXT         Chunk size (e.g., '8MB', '16MB') [default: 8MB]
   --workers INTEGER         Parallel download workers [default: 4]
   --retries INTEGER         Max retries per chunk [default: 3]
+  --proxy TEXT              HTTP/HTTPS/SOCKS5 proxy URL
+  --limit-rate TEXT         Bandwidth limit (e.g., '10MB', '500KB')
+  --direct-write            Enable zero-assembly sparse file writing
   --config FILE             Path to config file
   --no-verify               Skip whole-file verification after assembly
   --header TEXT             Additional HTTP header (KEY:VALUE), repeatable
@@ -480,6 +493,7 @@ Arguments:
 
 Options:
   --workers INTEGER         Override parallel workers [default: from state]
+  --limit-rate TEXT         Override bandwidth limit
   --verbose / --quiet       Log verbosity
   --help                    Show this message and exit
 ```
@@ -500,7 +514,20 @@ Options:
   --help                    Show this message and exit
 ```
 
-### 5.4 `status` Command
+### 5.4 `manifest` Command
+
+```
+Usage: chunkguard manifest COMMAND [OPTIONS] [ARGS]
+
+  Manage and verify ChunkGuard manifests.
+
+Commands:
+  generate    Create a .cgmanifest file from a local file
+  verify      Validate local file against a signed manifest
+  sign        Cryptographically sign a manifest with Ed25519
+```
+
+### 5.5 `status` Command
 
 ```
 Usage: ReliaDL status [OPTIONS] STATE_FILE
@@ -512,6 +539,18 @@ Arguments:
 
 Options:
   --json                    Output as JSON
+  --help                    Show this message and exit
+```
+
+### 5.6 `clean` Command
+
+```
+Usage: chunkguard clean [OPTIONS] TARGET_PATH
+
+  Remove residual chunk cache and state files.
+
+Options:
+  --all                     Purge all completed and failed session caches
   --help                    Show this message and exit
 ```
 

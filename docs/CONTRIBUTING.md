@@ -11,8 +11,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/ReliaDL.git
-cd ReliaDL
+git clone https://github.com/PxA-Labs/ChunkGuard.git
+cd ChunkGuard
 
 # Create virtual environment
 python -m venv .venv
@@ -87,17 +87,20 @@ test(assembler): add fault injection test for disk-full scenario
 perf(hash): use streaming hash to reduce peak memory usage
 ```
 
-### 2.3 Pull Request Process
-
-1. Create a feature branch from `develop`
-2. Make your changes with clear, focused commits
-3. Ensure all tests pass: `pytest -v`
-4. Ensure code quality: `ruff check .` and `mypy src/`
-5. Update documentation if public API changes
-6. Open a PR targeting `develop`
-7. Request review from at least one maintainer
-8. Address feedback
-9. Squash-merge after approval
+### 2.3 Pull Request Process & Automated Quality Gates
+ 
+ 1. Create a feature branch from `develop`
+ 2. Make your changes with clear, focused commits following [Conventional Commits](https://www.conventionalcommits.org/)
+ 3. Ensure your PR Title and Description satisfy CI validation:
+    - **PR Title**: Must use conventional commit syntax (e.g., `feat(core): add proxy support`) and be at least 10 characters.
+    - **PR Description**: Must be at least 30 characters and describe the changes without empty placeholders.
+ 4. Ensure Novelty Verification passes: No debug placeholders (`# TODO`, `# FIXME`, `placeholder_value_here`, `dummy_value`) in production code.
+ 5. Ensure all unit and integration tests pass: `python -m unittest discover -s tests` or `pytest -v`
+ 6. Ensure code quality: `ruff check .` and `mypy src/`
+ 7. Update documentation in `docs/` and changelog if public APIs or behaviors change.
+ 8. Open a PR targeting `develop` (or `master` for hotfixes)
+ 9. Request review from CODEOWNERS maintainers
+ 10. Squash-merge after approval
 
 ---
 

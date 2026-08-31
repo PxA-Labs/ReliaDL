@@ -199,3 +199,126 @@ Workers must implement flow control when writing to disk to prevent memory exhau
 - `MAX_RETRIES`: Hard limit on transient network error retries.
 - `PARITY_GROUP_SIZE`: $k$ parameter for Predictive Parity (default 8).
 
+## 10. Error Handling Specification
+
+### 10.1 Error Categories
+
+| Category | Examples | Retry? | User Action |
+|---|---|---|---|
+| **Configuration** | Invalid chunk size, bad URL format | No | Fix configuration |
+| **Network Transient** | Timeout, connection reset, DNS failure | Yes | Automatic retry |
+| **Network Permanent** | 404 Not Found, 403 Forbidden | No | Check URL / credentials |
+| **Integrity** | Hash mismatch, truncated chunk | Yes | Automatic re-download |
+| **Storage** | Disk full, permission denied | No | Free space / fix permissions |
+| **State** | Corrupted state file | Partial | May need to restart download |
+| **Server** | Range not supported, file changed | No | Fall back or restart |
+
+### 10.2 Error Response Format
+
+All errors include structured context for debugging:
+
+```json
+{
+  "error_type": "ChunkHashMismatchError",
+  "message": "Chunk 42 hash verification failed",
+  "context": {
+    "chunk_index": 42,
+    "start_byte": 352321536,
+    "end_byte": 360710143,
+    "expected_hash": "a1b2c3d4e5f6...",
+    "computed_hash": "9f8e7d6c5b4a...",
+    "attempt": 2,
+    "url": "https://example.com/file.iso"
+  },
+  "is_retryable": true,
+  "timestamp": "2026-01-15T10:35:42.123Z"
+}
+```
+
+---
+
+## 11. Security Specification
+
+### 11.1 TLS Requirements
+
+- TLS 1.2+ required (TLS 1.0/1.1 rejected)
+- Certificate verification enabled by default
+- Certificate pinning available via configuration
+
+### 11.2 Hash Security
+
+- SHA-256 is the minimum acceptable hash algorithm
+- Hash comparisons use constant-time comparison (`hmac.compare_digest`)
+- No support for weak algorithms (MD5, SHA-1) even in non-security contexts
+
+### 11.3 File Permissions
+
+```python
+# Chunk files: owner read/write only
+CHUNK_FILE_PERMISSIONS = 0o600
+
+# State files: owner read/write only
+STATE_FILE_PERMISSIONS = 0o600
+
+# Output file: follows umask (typically 0o644)
+OUTPUT_FILE_PERMISSIONS = None  # Use system default
+```
+
+---
+
+## 12. Platform Compatibility
+
+| Platform | Python Version | File System | Atomic Rename | Tested |
+|---|---|---|---|---|
+| Linux (x86_64) | 3.10+ | ext4, XFS, Btrfs | ✅ `os.replace()` | ✅ |
+| macOS (arm64) | 3.10+ | APFS, HFS+ | ✅ `os.replace()` | ✅ |
+| Windows 10+ (x86_64) | 3.10+ | NTFS | ✅ `os.replace()` | ✅ |
+| Windows (FAT32) | 3.10+ | FAT32 | ⚠️ Non-atomic | ⚠️ Limited |
+
+### Large File Support
+
+- Files > 2 GB: Supported on all 64-bit platforms
+- Files > 4 GB: Requires 64-bit Python and file system support (NTFS, ext4, APFS)
+- Maximum tested file size: 1 TB
+
+---
+
+## 13. Direct Sparse File Writing Specification
+
+When `--direct-write` is enabled, ChunkGuard bypasses the temporary chunk file staging directory and directly writes verified byte buffers into pre-allocated sparse target files:
+
+### 13.1 Pre-Allocation Protocol
+1. **POSIX Systems (Linux/macOS)**: Uses `posix_fallocate(fd, 0, file_size)` to allocate contiguous disk blocks and prevent mid-transfer disk-full crashes (`ENOSPC`).
+2. **Windows (NTFS)**: Uses Win32 `SetFileInformationByHandle` or `SetFileValidData` for fast uninitialized file pre-allocation.
+
+### 13.2 Concurrent Direct Writing (`os.pwrite`)
+Each worker writes directly to its chunk offset using positional write operations:
+
+```python
+def write_chunk_direct(fd: int, start_byte: int, data: bytes) -> int:
+    """
+    Thread-safe / Coroutine-safe positional write.
+    Does not modify the shared file descriptor seek pointer.
+    """
+    return os.pwrite(fd, data, start_byte)
+```
+
+---
+
+## 14. Bandwidth Throttling Specification (Token Bucket)
+
+### 14.1 Mathematical Model
+Let $R$ be the configured rate limit (bytes/sec) and $C = 2 \times R$ be the bucket capacity.
+* At time $t$, elapsed time $\Delta t = t - t_{\text{last}}$.
+* Tokens added: $T_{\text{new}} = \min(C, T_{\text{current}} + R \cdot \Delta t)$.
+* For a chunk read request of size $B$ bytes:
+  * If $T_{\text{new}} \ge B$: consume $B$ tokens and return immediately.
+  * If $T_{\text{new}} < B$: compute required sleep duration $\Delta t_{\text{sleep}} = \frac{B - T_{\text{new}}}{R}$, await `asyncio.sleep(sleep_time)`, and consume $B$ tokens.
+
+---
+
+## 15. Cross-References
+
+* For full Manifest details: see [MANIFEST_SPECIFICATION.md](MANIFEST_SPECIFICATION.md)
+* For Cloud Protocol Adapters: see [CLOUD_ADAPTERS.md](CLOUD_ADAPTERS.md)
+* For Telemetry & Tracing: see [OBSERVABILITY.md](OBSERVABILITY.md)

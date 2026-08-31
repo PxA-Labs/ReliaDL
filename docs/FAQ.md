@@ -126,6 +126,15 @@ ReliaDL will automatically fall back to a single-stream download. You lose paral
 ### My antivirus/firewall is blocking ReliaDL
 ReliaDL makes multiple simultaneous HTTP connections, which some security software flags as suspicious. You may need to whitelist ReliaDL or its Python process. The tool only makes outbound HTTPS requests — it does not listen on any ports or accept incoming connections.
 
+### How does Direct Write mode save disk space?
+When `--direct-write` is enabled, ChunkGuard uses `posix_fallocate` (or NTFS sparse file allocation) to pre-allocate the exact file size, and coroutine workers write chunks directly to their byte offsets via `os.pwrite()`. This avoids the temporary chunk directory, reducing disk space from 2.1× to exactly 1.0× of file size and eliminating post-download assembly delay.
+
+### Can I download directly from private AWS S3, GCS, or Azure Blob buckets?
+Yes. ChunkGuard provides native cloud adapters. Pass `s3://bucket/key`, `gs://bucket/object`, or `az://container/blob` URLs and ChunkGuard will authenticate using IAM roles, service accounts, or environment credentials and execute chunked range downloads.
+
+### What is a `.cgmanifest` file?
+A ChunkGuard Manifest is a cryptographically signed (Ed25519) JSON file that lists the SHA-256 hash of every chunk, the overall Merkle tree root, and alternate mirror URLs. It allows downloading and verifying chunks with pre-authenticated guarantees without trusting the origin server on first download.
+
 ---
 
 ## Comparison

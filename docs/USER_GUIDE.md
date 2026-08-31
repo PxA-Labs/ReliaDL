@@ -27,8 +27,8 @@ pip install ReliaDL
 ### Option 2: From Source
 
 ```bash
-git clone https://github.com/your-org/ReliaDL.git
-cd ReliaDL
+git clone https://github.com/PxA-Labs/ChunkGuard.git
+cd ChunkGuard
 pip install .
 ```
 
@@ -188,6 +188,45 @@ logging:
 ```
 
 ReliaDL automatically uses `./ReliaDL.yaml` if it exists.
+
+### 4.7 Limit Download Speed
+
+To prevent consuming all available bandwidth on shared networks:
+
+```bash
+chunkguard download --limit-rate 10MB "https://example.com/largefile.iso" "./largefile.iso"
+```
+
+### 4.8 Corporate Proxy & Custom CA Certificates
+
+Route traffic through an HTTP or SOCKS5 proxy:
+
+```bash
+chunkguard download \
+  --proxy "http://proxy.corp.internal:8080" \
+  --header "Proxy-Authorization:Basic dXNlcjpwYXNz" \
+  "https://example.com/build.iso" "./build.iso"
+```
+
+### 4.9 Direct Sparse Write Mode (Save Disk Space)
+
+If you have limited disk space and want to eliminate temporary chunk files:
+
+```bash
+chunkguard download --direct-write "https://example.com/huge.iso" "./huge.iso"
+```
+
+This allocates the exact file size immediately and writes chunks directly to disk positions without requiring temporary chunk files.
+
+### 4.10 Download Using Signed Manifests
+
+Download artifacts with guaranteed pre-authenticated chunk hashes:
+
+```bash
+chunkguard download \
+  --manifest "./release.cgmanifest" \
+  --output "./ubuntu-server.iso"
+```
 
 ---
 
