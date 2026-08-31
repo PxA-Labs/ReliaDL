@@ -1,6 +1,6 @@
-# ChunkGuard — Default Configuration
+# ReliaDL — Default Configuration
 # This file documents all available configuration options with their defaults.
-# Copy to ./chunkguard.yaml and customize as needed.
+# Copy to ./ReliaDL.yaml and customize as needed.
 
 # ─── Download Settings ─────────────────────────────────────────────
 download:
@@ -40,7 +40,7 @@ network:
   max_redirects: 5
 
   # HTTP User-Agent header
-  user_agent: "ChunkGuard/1.0"
+  user_agent: "ReliaDL/1.0"
 
   # Enable HTTP/2 protocol (recommended for multiplexing)
   http2: true
@@ -118,3 +118,4 @@ progress:
   # Show individual chunk download/verification events
   # Useful for debugging, noisy for normal use
   show_chunk_details: false
+

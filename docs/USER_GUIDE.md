@@ -1,13 +1,13 @@
-# User Guide — ChunkGuard
+# User Guide — ReliaDL
 
 > **Audience**: End Users
 > **Reading time**: ~8 minutes
 
 ---
 
-## 1. What Is ChunkGuard?
+## 1. What Is ReliaDL?
 
-ChunkGuard is a tool that downloads large files reliably. Unlike regular download tools, if your internet drops or a download is corrupted, ChunkGuard will:
+ReliaDL is a tool that downloads large files reliably. Unlike regular download tools, if your internet drops or a download is corrupted, ReliaDL will:
 
 - **Resume** from where it left off (not from the beginning)
 - **Detect corruption** in any part of the file automatically
@@ -21,7 +21,7 @@ ChunkGuard is a tool that downloads large files reliably. Unlike regular downloa
 ### Option 1: pip (Recommended)
 
 ```bash
-pip install chunkguard
+pip install ReliaDL
 ```
 
 ### Option 2: From Source
@@ -35,8 +35,8 @@ pip install .
 ### Verify Installation
 
 ```bash
-chunkguard --version
-# ChunkGuard v1.0.0
+ReliaDL --version
+# ReliaDL v1.0.0
 ```
 
 ---
@@ -46,13 +46,13 @@ chunkguard --version
 ### 3.1 Download a File
 
 ```bash
-chunkguard download "https://example.com/largefile.iso" "./largefile.iso"
+ReliaDL download "https://example.com/largefile.iso" "./largefile.iso"
 ```
 
 You'll see a progress display:
 
 ```
-ChunkGuard v1.0.0 — Downloading largefile.iso
+ReliaDL v1.0.0 — Downloading largefile.iso
 
   ████████████████████░░░░░░░░░░  68.2%
 
@@ -66,23 +66,23 @@ ChunkGuard v1.0.0 — Downloading largefile.iso
 If you know the file's SHA-256 hash (often provided by the download page), include it for guaranteed integrity:
 
 ```bash
-chunkguard download \
+ReliaDL download \
   --hash "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" \
   "https://example.com/largefile.iso" \
   "./largefile.iso"
 ```
 
-When the download finishes, ChunkGuard will verify the entire file matches the expected hash.
+When the download finishes, ReliaDL will verify the entire file matches the expected hash.
 
 ### 3.3 Resume an Interrupted Download
 
 If your download is interrupted (power outage, network drop, you close the terminal), just resume it:
 
 ```bash
-chunkguard resume "./.chunkguard/largefile.iso.state"
+ReliaDL resume "./.ReliaDL/largefile.iso.state"
 ```
 
-ChunkGuard will:
+ReliaDL will:
 1. Load the saved state
 2. Check which chunks are already downloaded
 3. Download only the remaining chunks
@@ -93,7 +93,7 @@ ChunkGuard will:
 Already have a file and want to check if it's intact?
 
 ```bash
-chunkguard verify "./largefile.iso" "e3b0c44298fc1c149afbf4c8996fb924..."
+ReliaDL verify "./largefile.iso" "e3b0c44298fc1c149afbf4c8996fb924..."
 ```
 
 Output:
@@ -118,10 +118,10 @@ Or if it's corrupted:
 
 ### 4.1 Faster Downloads (More Workers)
 
-By default, ChunkGuard uses 4 parallel connections. For faster servers:
+By default, ReliaDL uses 4 parallel connections. For faster servers:
 
 ```bash
-chunkguard download --workers 8 "https://example.com/file.iso" "./file.iso"
+ReliaDL download --workers 8 "https://example.com/file.iso" "./file.iso"
 ```
 
 ### 4.2 Custom Chunk Size
@@ -129,7 +129,7 @@ chunkguard download --workers 8 "https://example.com/file.iso" "./file.iso"
 The default chunk size is 8 MB. For very large files, larger chunks reduce overhead:
 
 ```bash
-chunkguard download --chunk-size 32MB "https://example.com/huge.tar" "./huge.tar"
+ReliaDL download --chunk-size 32MB "https://example.com/huge.tar" "./huge.tar"
 ```
 
 ### 4.3 Custom Headers (Authentication)
@@ -137,7 +137,7 @@ chunkguard download --chunk-size 32MB "https://example.com/huge.tar" "./huge.tar
 For servers that require authentication:
 
 ```bash
-chunkguard download \
+ReliaDL download \
   --header "Authorization:Bearer YOUR_TOKEN_HERE" \
   "https://private.example.com/file.zip" \
   "./file.zip"
@@ -148,7 +148,7 @@ chunkguard download \
 If you don't have an expected hash and want to skip the final whole-file verification:
 
 ```bash
-chunkguard download --no-verify "https://example.com/file.iso" "./file.iso"
+ReliaDL download --no-verify "https://example.com/file.iso" "./file.iso"
 ```
 
 > **Note**: Per-chunk verification still runs — only the final whole-file hash check is skipped.
@@ -158,7 +158,7 @@ chunkguard download --no-verify "https://example.com/file.iso" "./file.iso"
 View the progress of a download from its state file:
 
 ```bash
-chunkguard status "./.chunkguard/largefile.iso.state"
+ReliaDL status "./.ReliaDL/largefile.iso.state"
 ```
 
 ```
@@ -173,7 +173,7 @@ Download Status: IN_PROGRESS
 
 ### 4.6 Using a Configuration File
 
-Create a `chunkguard.yaml` in your current directory:
+Create a `ReliaDL.yaml` in your current directory:
 
 ```yaml
 download:
@@ -187,7 +187,7 @@ logging:
   level: "INFO"
 ```
 
-ChunkGuard automatically uses `./chunkguard.yaml` if it exists.
+ReliaDL automatically uses `./ReliaDL.yaml` if it exists.
 
 ### 4.7 Limit Download Speed
 
@@ -234,12 +234,12 @@ chunkguard download \
 
 ### 5.1 Files Created During Download
 
-When you download to `./largefile.iso`, ChunkGuard creates:
+When you download to `./largefile.iso`, ReliaDL creates:
 
 ```
 ./
 ├── largefile.iso                              ← Final file (after assembly)
-└── .chunkguard/
+└── .ReliaDL/
     ├── largefile.iso.state                    ← Download state (for resume)
     └── largefile.iso.chunks/
         ├── 00000.chunk                        ← Chunk 0
@@ -248,7 +248,7 @@ When you download to `./largefile.iso`, ChunkGuard creates:
         └── ...
 ```
 
-After successful download, the `.chunkguard` directory is cleaned up automatically.
+After successful download, the `.ReliaDL` directory is cleaned up automatically.
 
 ### 5.2 Exit Codes
 
@@ -269,28 +269,28 @@ After successful download, the `.chunkguard` directory is cleaned up automatical
 
 Just run `resume`:
 ```bash
-chunkguard resume "./.chunkguard/filename.state"
+ReliaDL resume "./.ReliaDL/filename.state"
 ```
 
 ### "How do I know if my download is intact?"
 
 Use `verify`:
 ```bash
-chunkguard verify "./file.iso" "EXPECTED_SHA256_HASH"
+ReliaDL verify "./file.iso" "EXPECTED_SHA256_HASH"
 ```
 
 ### "It keeps retrying the same chunk and failing"
 
 The server might be having issues. You can:
-1. Wait and try again later: `chunkguard resume state_file`
-2. Try with more retries: `chunkguard resume --retries 10 state_file`
+1. Wait and try again later: `ReliaDL resume state_file`
+2. Try with more retries: `ReliaDL resume --retries 10 state_file`
 3. Check if the URL is still valid
 
 ### "My download is very slow"
 
 Try more parallel workers:
 ```bash
-chunkguard download --workers 8 URL OUTPUT
+ReliaDL download --workers 8 URL OUTPUT
 ```
 
 Or check if your network is the bottleneck (run a speed test).
@@ -301,7 +301,7 @@ You need approximately **twice** the file size during download (once for chunks,
 
 ### "Can I download multiple files at once?"
 
-Run multiple `chunkguard download` commands in separate terminals. Each download is independent.
+Run multiple `ReliaDL download` commands in separate terminals. Each download is independent.
 
 ### "Can I limit the download speed?"
 
@@ -319,7 +319,7 @@ network:
 2. **Use larger chunks** for very large files: `--chunk-size 32MB`
 3. **Use smaller chunks** on unreliable connections: `--chunk-size 4MB` (less data to re-download on failure)
 4. **Always provide a hash** when available — it guarantees your file is exactly what you expect
-5. **Don't delete `.chunkguard`** directory until the download is complete — it contains your resume data
+5. **Don't delete `.ReliaDL`** directory until the download is complete — it contains your resume data
 
 ---
 
@@ -327,11 +327,12 @@ network:
 
 ```bash
 # General help
-chunkguard --help
+ReliaDL --help
 
 # Command-specific help
-chunkguard download --help
-chunkguard resume --help
-chunkguard verify --help
-chunkguard status --help
+ReliaDL download --help
+ReliaDL resume --help
+ReliaDL verify --help
+ReliaDL status --help
 ```
+

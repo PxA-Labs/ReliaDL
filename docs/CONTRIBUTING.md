@@ -1,4 +1,4 @@
-# Contributing Guide — ChunkGuard
+# Contributing Guide — ReliaDL
 
 > **Audience**: Open Source Contributors, Internal Team
 > **Reading time**: ~5 minutes
@@ -211,3 +211,4 @@ Install with: `pre-commit install`
 - **Maintainers**: See CODEOWNERS file
 - **Issues**: GitHub Issues for bugs and feature requests
 - **Discussions**: GitHub Discussions for questions and ideas
+

@@ -1,4 +1,4 @@
-# Error Handling & Recovery — ChunkGuard
+# Error Handling & Recovery — ReliaDL
 
 > **Audience**: Software Engineers, SREs
 > **Reading time**: ~10 minutes
@@ -10,7 +10,7 @@
 ### 1.1 Exception Hierarchy
 
 ```
-ChunkGuardError (base)
+ReliaDLError (base)
 │
 ├── ConfigurationError
 │   Description: Invalid or missing configuration values
@@ -185,11 +185,11 @@ ChunkGuardError (base)
 
 | Scenario | Recovery Steps |
 |---|---|
-| **All retries exhausted** | 1. Check network connectivity<br>2. Check server status<br>3. Run `chunkguard resume state_file` to retry failed chunks |
+| **All retries exhausted** | 1. Check network connectivity<br>2. Check server status<br>3. Run `ReliaDL resume state_file` to retry failed chunks |
 | **State file corrupted** | 1. Check if `.state.bak` backup exists<br>2. If not, delete state file and chunk dir<br>3. Start fresh download |
-| **Disk full** | 1. Free disk space<br>2. Run `chunkguard resume state_file` |
+| **Disk full** | 1. Free disk space<br>2. Run `ReliaDL resume state_file` |
 | **File changed on server** | 1. Delete state file and chunks<br>2. Start fresh download with new URL/hash |
-| **Whole-file hash mismatch** | 1. Run `chunkguard resume state_file` (auto-detects and re-downloads bad chunks)<br>2. If persists, start fresh download |
+| **Whole-file hash mismatch** | 1. Run `ReliaDL resume state_file` (auto-detects and re-downloads bad chunks)<br>2. If persists, start fresh download |
 
 ---
 
@@ -299,3 +299,4 @@ GET /health
   "uptime_seconds": 3600
 }
 ```
+

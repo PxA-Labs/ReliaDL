@@ -1,25 +1,25 @@
-# API Reference — ChunkGuard
+# API Reference — ReliaDL
 
-> **Audience**: Developers integrating or extending ChunkGuard
+> **Audience**: Developers integrating or extending ReliaDL
 > **Reading time**: ~15 minutes
 
 ---
 
 ## 1. Public API Overview
 
-ChunkGuard can be used as a CLI tool or as a Python library. This document covers the programmatic Python API.
+ReliaDL can be used as a CLI tool or as a Python library. This document covers the programmatic Python API.
 
 ### Installation
 
 ```bash
-pip install chunkguard
+pip install ReliaDL
 ```
 
 ### Quick Start (Library Usage)
 
 ```python
 import asyncio
-from chunkguard import ChunkGuard, DownloadConfig
+from ReliaDL import ReliaDL, DownloadConfig
 
 async def main():
     config = DownloadConfig(
@@ -28,7 +28,7 @@ async def main():
         max_retries_per_chunk=3,
     )
     
-    cg = ChunkGuard(config)
+    cg = ReliaDL(config)
     
     result = await cg.download(
         url="https://example.com/largefile.iso",
@@ -47,12 +47,12 @@ asyncio.run(main())
 
 ## 2. Core Classes
 
-### 2.1 `ChunkGuard`
+### 2.1 `ReliaDL`
 
 The main entry point for all download operations.
 
 ```python
-class ChunkGuard:
+class ReliaDL:
     """
     Fault-tolerant chunked file download engine.
     
@@ -61,7 +61,7 @@ class ChunkGuard:
     
     def __init__(self, config: DownloadConfig | None = None) -> None:
         """
-        Initialize ChunkGuard.
+        Initialize ReliaDL.
         
         Args:
             config: Download configuration. If None, uses defaults.
@@ -106,7 +106,7 @@ class ChunkGuard:
         Resume an interrupted download from a state file.
         
         Args:
-            state_file:    Path to the .chunkguard state file
+            state_file:    Path to the .ReliaDL state file
             on_progress:   Progress callback
         
         Returns:
@@ -203,7 +203,7 @@ class DownloadConfig:
     """Hash algorithm for verification. Currently only 'sha256' is supported."""
     
     # Storage
-    state_directory: str = ".chunkguard"
+    state_directory: str = ".ReliaDL"
     """Directory name for state and chunk files (relative to output directory)."""
     
     # Verification
@@ -457,7 +457,7 @@ Example:
 ### 5.1 `download` Command
 
 ```
-Usage: chunkguard download [OPTIONS] URL OUTPUT
+Usage: ReliaDL download [OPTIONS] URL OUTPUT
 
   Download a file with chunked verification.
 
@@ -484,12 +484,12 @@ Options:
 ### 5.2 `resume` Command
 
 ```
-Usage: chunkguard resume [OPTIONS] STATE_FILE
+Usage: ReliaDL resume [OPTIONS] STATE_FILE
 
   Resume an interrupted download.
 
 Arguments:
-  STATE_FILE  Path to .chunkguard state file
+  STATE_FILE  Path to .ReliaDL state file
 
 Options:
   --workers INTEGER         Override parallel workers [default: from state]
@@ -501,7 +501,7 @@ Options:
 ### 5.3 `verify` Command
 
 ```
-Usage: chunkguard verify [OPTIONS] FILE HASH
+Usage: ReliaDL verify [OPTIONS] FILE HASH
 
   Verify a file's SHA-256 hash.
 
@@ -530,12 +530,12 @@ Commands:
 ### 5.5 `status` Command
 
 ```
-Usage: chunkguard status [OPTIONS] STATE_FILE
+Usage: ReliaDL status [OPTIONS] STATE_FILE
 
   Display download progress from a state file.
 
 Arguments:
-  STATE_FILE  Path to .chunkguard state file
+  STATE_FILE  Path to .ReliaDL state file
 
 Options:
   --json                    Output as JSON
@@ -574,17 +574,17 @@ Options:
 
 | Variable | Description | Default |
 |---|---|---|
-| `CHUNKGUARD_CHUNK_SIZE` | Override chunk size (e.g., `16MB`) | `8MB` |
-| `CHUNKGUARD_WORKERS` | Override parallel worker count | `4` |
-| `CHUNKGUARD_RETRIES` | Override max retries per chunk | `3` |
-| `CHUNKGUARD_LOG_LEVEL` | Logging level | `INFO` |
-| `CHUNKGUARD_LOG_FORMAT` | Log format (`json` or `text`) | `json` |
-| `CHUNKGUARD_CONFIG` | Path to config file | None |
-| `CHUNKGUARD_STATE_DIR` | State directory name | `.chunkguard` |
-| `CHUNKGUARD_NO_VERIFY` | Skip whole-file verification (`1`/`true`) | `false` |
-| `CHUNKGUARD_HTTP2` | Enable HTTP/2 (`1`/`true`) | `true` |
-| `CHUNKGUARD_VERIFY_SSL` | Verify TLS certs (`1`/`true`) | `true` |
-| `CHUNKGUARD_USER_AGENT` | User-Agent header | `ChunkGuard/1.0` |
+| `ReliaDL_CHUNK_SIZE` | Override chunk size (e.g., `16MB`) | `8MB` |
+| `ReliaDL_WORKERS` | Override parallel worker count | `4` |
+| `ReliaDL_RETRIES` | Override max retries per chunk | `3` |
+| `ReliaDL_LOG_LEVEL` | Logging level | `INFO` |
+| `ReliaDL_LOG_FORMAT` | Log format (`json` or `text`) | `json` |
+| `ReliaDL_CONFIG` | Path to config file | None |
+| `ReliaDL_STATE_DIR` | State directory name | `.ReliaDL` |
+| `ReliaDL_NO_VERIFY` | Skip whole-file verification (`1`/`true`) | `false` |
+| `ReliaDL_HTTP2` | Enable HTTP/2 (`1`/`true`) | `true` |
+| `ReliaDL_VERIFY_SSL` | Verify TLS certs (`1`/`true`) | `true` |
+| `ReliaDL_USER_AGENT` | User-Agent header | `ReliaDL/1.0` |
 
 ---
 
@@ -594,7 +594,7 @@ Options:
 
 ```python
 async def basic_download():
-    cg = ChunkGuard()
+    cg = ReliaDL()
     result = await cg.download(
         url="https://releases.example.com/app-v2.0.tar.gz",
         output_path="./app-v2.0.tar.gz",
@@ -618,7 +618,7 @@ async def verified_download():
         speed = report.current_speed_bps / (1024 * 1024)
         print(f"\r  {bar}  {report.percentage:5.1f}%  {speed:.1f} MB/s", end="")
     
-    cg = ChunkGuard(config)
+    cg = ReliaDL(config)
     result = await cg.download(
         url="https://data.example.com/dataset.parquet",
         output_path="./dataset.parquet",
@@ -633,7 +633,7 @@ async def verified_download():
 
 ```python
 async def authenticated_download():
-    cg = ChunkGuard()
+    cg = ReliaDL()
     result = await cg.download(
         url="https://private.example.com/artifact.zip",
         output_path="./artifact.zip",
@@ -648,9 +648,9 @@ async def authenticated_download():
 
 ```python
 async def resume_download():
-    cg = ChunkGuard()
+    cg = ReliaDL()
     result = await cg.resume(
-        state_file="./downloads/.chunkguard/largefile.iso.state",
+        state_file="./downloads/.ReliaDL/largefile.iso.state",
     )
     print(f"Resumed and completed: {result.output_path}")
 ```
@@ -659,7 +659,7 @@ async def resume_download():
 
 ```python
 async def verify_file():
-    cg = ChunkGuard()
+    cg = ReliaDL()
     result = await cg.verify(
         file_path="./largefile.iso",
         expected_hash="e3b0c44298fc1c149afbf4c8996fb924...",
@@ -672,3 +672,4 @@ async def verify_file():
         print(f"   Expected: {result.expected_hash}")
         print(f"   Computed: {result.computed_hash}")
 ```
+

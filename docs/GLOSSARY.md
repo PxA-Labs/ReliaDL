@@ -1,4 +1,4 @@
-# Glossary — ChunkGuard
+# Glossary — ReliaDL
 
 > **Audience**: Everyone
 > **Purpose**: Consistent terminology across all documentation
@@ -11,7 +11,7 @@
 | **Assembly** | The process of concatenating all verified chunks in sequential order to produce the final output file. Includes re-verification of each chunk hash during concatenation. |
 | **Atomic Write** | A write operation that either completes fully or not at all — no partial writes. Achieved via writing to a temporary file, fsyncing, then atomically renaming to the final path. |
 | **Avalanche Effect** | A property of cryptographic hash functions where a single bit change in the input produces a drastically different hash output. This is what makes corruption detectable. |
-| **Backoff** | A retry strategy where the delay between retries increases over time. ChunkGuard uses **exponential backoff** (delay doubles each attempt) with **jitter** (random variation to prevent thundering herd). |
+| **Backoff** | A retry strategy where the delay between retries increases over time. ReliaDL uses **exponential backoff** (delay doubles each attempt) with **jitter** (random variation to prevent thundering herd). |
 | **Backpressure** | A flow control mechanism that slows down data producers (network downloads) when data consumers (disk writes) can't keep up. Prevents memory exhaustion. |
 | **Byte Range** | A contiguous section of a file specified by a start byte (inclusive) and end byte (inclusive). Used in HTTP Range headers to request specific portions of a file. |
 | **CDN** | Content Delivery Network — a geographically distributed network of servers that cache and serve files closer to users. CDNs typically support Range requests. |
@@ -27,7 +27,7 @@
 | **Ed25519** | A high-speed, secure elliptic curve signature scheme (EdDSA using Curve25519) used to cryptographically sign ChunkGuard manifests. |
 | **ETag** | An HTTP response header containing a version identifier for the resource. Used by ChunkGuard to detect if the file changes on the server during a download. |
 | **Exponential Backoff** | A retry delay strategy where the wait time doubles after each failed attempt: 1s → 2s → 4s → 8s. Prevents overwhelming a struggling server. |
-| **Fault Tolerance** | The system's ability to continue operating correctly when components fail. ChunkGuard tolerates network failures, chunk corruption, and process crashes. |
+| **Fault Tolerance** | The system's ability to continue operating correctly when components fail. ReliaDL tolerates network failures, chunk corruption, and process crashes. |
 | **File Assembler** | The component responsible for concatenating verified chunks into the final output file and performing whole-file hash verification. |
 | **File Hash** | The SHA-256 hash of the entire assembled file. Used as the final integrity check after all chunks are concatenated. |
 | **Graceful Degradation** | The ability to fall back to a simpler mode when advanced features are unavailable. Example: falling back to single-stream download when the server doesn't support Range requests. |
@@ -38,7 +38,7 @@
 | **Hex Digest** | The hash output represented as a lowercase hexadecimal string. SHA-256 produces a 64-character hex digest. Example: `e3b0c44298fc1c14...` |
 | **HTTP CONNECT** | An HTTP method used to establish a raw TCP tunnel through forward proxies, typically for end-to-end encrypted HTTPS transfers. |
 | **HTTP Range Request** | An HTTP mechanism (RFC 7233) that allows requesting a specific byte range of a resource. Uses the `Range` header in the request and returns `206 Partial Content`. |
-| **Idempotent** | An operation that produces the same result regardless of how many times it's executed. All ChunkGuard operations are idempotent — safe to retry. |
+| **Idempotent** | An operation that produces the same result regardless of how many times it's executed. All ReliaDL operations are idempotent — safe to retry. |
 | **Jitter** | Random variation added to retry delays to prevent multiple workers from retrying at exactly the same time (thundering herd problem). |
 | **Manifest (`.cgmanifest`)** | A machine-readable, cryptographically signed catalog defining chunk boundaries, SHA-256 hashes, Merkle tree root, and mirror endpoints. |
 | **Mem0** | An intelligent AI agent memory management layer utilized in ChunkGuard development for retaining developer context and configuration facts. |
@@ -56,10 +56,11 @@
 | **SOCKS5** | An internet protocol (RFC 1928) that routes network packets between client and server via a proxy, supporting authentication and remote DNS. |
 | **Sparse File** | A type of file that reserves logical address space without allocating physical disk blocks until bytes are written. |
 | **Streaming Hash** | Computing a hash incrementally as data arrives, rather than hashing all data at once. Enables bounded memory usage regardless of chunk size. |
-| **State File** | A JSON file persisting the complete download state to disk. Enables resuming after crashes. Located at `.chunkguard/<filename>.state`. |
+| **State File** | A JSON file persisting the complete download state to disk. Enables resuming after crashes. Located at `.ReliaDL/<filename>.state`. |
 | **State Manager** | The component responsible for reading, writing, and validating state files. Uses atomic writes for crash safety. |
 | **Thundering Herd** | A problem where many processes retry simultaneously after a failure, overwhelming the recovering server. Mitigated by adding random jitter to retry delays. |
 | **Token Bucket** | A traffic-shaping rate-limiting algorithm that regulates byte streaming throughput by accumulating and consuming capacity tokens. |
 | **Trust-on-First-Download** | When no chunk hashes are pre-known, the system trusts the first download's hashes and uses them to verify subsequent retries. |
 | **Worker** | An async coroutine that downloads, hashes, and stores a single chunk. Multiple workers run concurrently within the asyncio event loop. |
 | **Worker Pool** | The set of concurrent workers managed by the Download Engine. Size is configurable via `max_parallel_workers`. |
+

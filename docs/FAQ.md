@@ -1,4 +1,4 @@
-# Frequently Asked Questions — ChunkGuard
+# Frequently Asked Questions — ReliaDL
 
 > **Audience**: Everyone
 
@@ -6,52 +6,52 @@
 
 ## General
 
-### What is ChunkGuard?
-ChunkGuard is a fault-tolerant file download tool that splits large files into small, independently verifiable chunks, downloads them in parallel, verifies each chunk using SHA-256 hashing, and reassembles them into the original file. If any chunk is corrupted or fails, only that chunk is re-downloaded.
+### What is ReliaDL?
+ReliaDL is a fault-tolerant file download tool that splits large files into small, independently verifiable chunks, downloads them in parallel, verifies each chunk using SHA-256 hashing, and reassembles them into the original file. If any chunk is corrupted or fails, only that chunk is re-downloaded.
 
 ### Why not just use `wget` or `curl`?
-Traditional download tools download files as a single stream. If the download is interrupted at 95%, you restart from 0%. If the file is silently corrupted, you won't know until you try to use it. ChunkGuard solves both problems with chunked downloads and cryptographic verification.
+Traditional download tools download files as a single stream. If the download is interrupted at 95%, you restart from 0%. If the file is silently corrupted, you won't know until you try to use it. ReliaDL solves both problems with chunked downloads and cryptographic verification.
 
-### What programming language is ChunkGuard written in?
+### What programming language is ReliaDL written in?
 Python 3.10+, using asyncio for concurrent downloads and the standard library's `hashlib` for SHA-256 hashing.
 
-### Is ChunkGuard free?
-Yes. ChunkGuard is released under the Apache License 2.0 — free for personal and commercial use with built-in patent protection.
+### Is ReliaDL free?
+Yes. ReliaDL is released under the Apache License 2.0 — free for personal and commercial use with built-in patent protection.
 
 ---
 
 ## Downloads
 
-### How large a file can ChunkGuard handle?
-ChunkGuard has been tested with files up to 1 TB. There is no hard upper limit — the architecture supports arbitrarily large files by automatically adjusting chunk size to keep the chunk count manageable (≤ 100,000).
+### How large a file can ReliaDL handle?
+ReliaDL has been tested with files up to 1 TB. There is no hard upper limit — the architecture supports arbitrarily large files by automatically adjusting chunk size to keep the chunk count manageable (≤ 100,000).
 
-### How fast is ChunkGuard compared to a normal download?
-With 4 parallel workers, ChunkGuard is typically 3–4× faster than a single-stream download. With 8 workers on a fast connection, speedups of 4–5× are common. The exact improvement depends on your network, the server, and disk speed.
+### How fast is ReliaDL compared to a normal download?
+With 4 parallel workers, ReliaDL is typically 3–4× faster than a single-stream download. With 8 workers on a fast connection, speedups of 4–5× are common. The exact improvement depends on your network, the server, and disk speed.
 
-### Does ChunkGuard work with any server?
-ChunkGuard works with any HTTP/HTTPS server. For optimal performance (chunked + parallel downloads), the server must support HTTP Range requests (most modern servers and CDNs do). If the server doesn't support Range requests, ChunkGuard falls back to a single-stream download with whole-file verification.
+### Does ReliaDL work with any server?
+ReliaDL works with any HTTP/HTTPS server. For optimal performance (chunked + parallel downloads), the server must support HTTP Range requests (most modern servers and CDNs do). If the server doesn't support Range requests, ReliaDL falls back to a single-stream download with whole-file verification.
 
 ### How do I know if a server supports Range requests?
-ChunkGuard detects this automatically via a HEAD request before downloading. If you want to check manually:
+ReliaDL detects this automatically via a HEAD request before downloading. If you want to check manually:
 ```bash
 curl -I -H "Range: bytes=0-0" https://example.com/file.iso
 ```
 If you see `HTTP/1.1 206 Partial Content`, Range requests are supported.
 
 ### What happens if my internet drops during a download?
-ChunkGuard saves its state to a file after every chunk. When your internet is back, run `chunkguard resume state_file` to pick up exactly where you left off. Only the incomplete chunk needs to be re-downloaded.
+ReliaDL saves its state to a file after every chunk. When your internet is back, run `ReliaDL resume state_file` to pick up exactly where you left off. Only the incomplete chunk needs to be re-downloaded.
 
 ### Can I pause and resume a download?
-Yes. Press Ctrl+C to pause (saves state). Run `chunkguard resume state_file` to resume later — even days or weeks later, as long as the file hasn't changed on the server.
+Yes. Press Ctrl+C to pause (saves state). Run `ReliaDL resume state_file` to resume later — even days or weeks later, as long as the file hasn't changed on the server.
 
 ### What if the file changes on the server while I'm downloading?
-ChunkGuard tracks the server's ETag (version identifier). If the ETag changes between chunks, ChunkGuard detects this, warns you, and requires a fresh download to avoid mixing old and new file versions.
+ReliaDL tracks the server's ETag (version identifier). If the ETag changes between chunks, ReliaDL detects this, warns you, and requires a fresh download to avoid mixing old and new file versions.
 
 ---
 
 ## Integrity & Security
 
-### How does ChunkGuard detect corruption?
+### How does ReliaDL detect corruption?
 Every chunk is hashed using SHA-256 as its bytes arrive over the network. The computed hash is compared against the expected hash. SHA-256 is a cryptographic hash function where even a single bit change produces a completely different hash — making any corruption immediately detectable.
 
 ### What is SHA-256?
@@ -64,7 +64,7 @@ In theory, a hash collision (two different inputs producing the same hash) is po
 MD5 has known collision attacks — researchers have demonstrated practical collision generation since 2004. This means an attacker could craft a malicious file with the same MD5 hash as a legitimate file. SHA-256 has no known practical attacks.
 
 ### Is my download encrypted?
-ChunkGuard uses whatever transport the URL provides. HTTPS URLs are encrypted via TLS. HTTP URLs are not encrypted. Always use HTTPS for security. ChunkGuard warns you if you use an HTTP URL.
+ReliaDL uses whatever transport the URL provides. HTTPS URLs are encrypted via TLS. HTTP URLs are not encrypted. Always use HTTPS for security. ReliaDL warns you if you use an HTTP URL.
 
 ### Where should I get the expected hash?
 The expected hash should come from a **trusted source different from the download server**. Typically:
@@ -113,18 +113,18 @@ Yes, but performance may be reduced depending on the drive's write speed. USB 2.
 This means all chunks downloaded successfully, but the assembled file doesn't match the expected hash. This can happen if:
 1. The expected hash is wrong (double-check the source)
 2. The file changed on the server during download (ETag check should catch this)
-3. Disk corruption occurred after download (run `chunkguard verify` again)
+3. Disk corruption occurred after download (run `ReliaDL verify` again)
 
 ### "Server does not support Range requests" — what do I do?
-ChunkGuard will automatically fall back to a single-stream download. You lose parallel downloads and per-chunk retry, but whole-file hash verification still works. Contact the server administrator to request Range request support.
+ReliaDL will automatically fall back to a single-stream download. You lose parallel downloads and per-chunk retry, but whole-file hash verification still works. Contact the server administrator to request Range request support.
 
 ### State file is corrupted — can I recover?
 1. Check for a backup at `filename.state.bak`
-2. If no backup, you can try to rebuild: ChunkGuard can re-verify existing chunk files on disk
+2. If no backup, you can try to rebuild: ReliaDL can re-verify existing chunk files on disk
 3. As a last resort, delete the state file and chunk directory, then start a fresh download
 
-### My antivirus/firewall is blocking ChunkGuard
-ChunkGuard makes multiple simultaneous HTTP connections, which some security software flags as suspicious. You may need to whitelist ChunkGuard or its Python process. The tool only makes outbound HTTPS requests — it does not listen on any ports or accept incoming connections.
+### My antivirus/firewall is blocking ReliaDL
+ReliaDL makes multiple simultaneous HTTP connections, which some security software flags as suspicious. You may need to whitelist ReliaDL or its Python process. The tool only makes outbound HTTPS requests — it does not listen on any ports or accept incoming connections.
 
 ### How does Direct Write mode save disk space?
 When `--direct-write` is enabled, ChunkGuard uses `posix_fallocate` (or NTFS sparse file allocation) to pre-allocate the exact file size, and coroutine workers write chunks directly to their byte offsets via `os.pwrite()`. This avoids the temporary chunk directory, reducing disk space from 2.1× to exactly 1.0× of file size and eliminating post-download assembly delay.
@@ -139,8 +139,8 @@ A ChunkGuard Manifest is a cryptographically signed (Ed25519) JSON file that lis
 
 ## Comparison
 
-### ChunkGuard vs wget
-| Feature | wget | ChunkGuard |
+### ReliaDL vs wget
+| Feature | wget | ReliaDL |
 |---|---|---|
 | Resume | ✅ (single-stream) | ✅ (per-chunk) |
 | Parallel downloads | ❌ | ✅ (configurable) |
@@ -148,8 +148,8 @@ A ChunkGuard Manifest is a cryptographically signed (Ed25519) JSON file that lis
 | Selective re-download | ❌ | ✅ |
 | Corruption detection | ❌ | ✅ |
 
-### ChunkGuard vs aria2
-| Feature | aria2 | ChunkGuard |
+### ReliaDL vs aria2
+| Feature | aria2 | ReliaDL |
 |---|---|---|
 | Parallel downloads | ✅ | ✅ |
 | Per-chunk hash verification | ❌ | ✅ |
@@ -157,11 +157,12 @@ A ChunkGuard Manifest is a cryptographically signed (Ed25519) JSON file that lis
 | BitTorrent support | ✅ | ❌ |
 | Simplicity | Complex | Simple |
 
-### ChunkGuard vs BitTorrent
-| Feature | BitTorrent | ChunkGuard |
+### ReliaDL vs BitTorrent
+| Feature | BitTorrent | ReliaDL |
 |---|---|---|
 | Peer-to-peer | ✅ | ❌ (HTTP only) |
 | Per-piece hash verification | ✅ | ✅ |
 | Requires torrent file/magnet | ✅ | ❌ (just a URL) |
 | Works with any HTTP server | ❌ | ✅ |
 | Firewall friendly | ❌ (needs ports) | ✅ (outbound HTTPS only) |
+
