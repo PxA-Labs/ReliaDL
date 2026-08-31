@@ -1,6 +1,6 @@
-# ChunkGuard — Default Configuration
+# ReliaDL — Default Configuration
 # This file documents all available configuration options with their defaults.
-# Copy to ./chunkguard.yaml and customize as needed.
+# Copy to ./ReliaDL.yaml and customize as needed.
 
 # ─── Download Settings ─────────────────────────────────────────────
 download:
@@ -22,10 +22,13 @@ download:
   cleanup_chunks_on_complete: true
 
   # Check available disk space before starting download
-  # Requires approximately 2x file size during download
+  # Requires approximately 2x file size during download (or 1x in direct_write mode)
   pre_check_disk_space: true
 
-# ─── Network Settings ──────────────────────────────────────────────
+  # Enable direct sparse write mode (bypasses staged chunk directory)
+  direct_write: false
+
+# ─── Network & Proxy Settings ──────────────────────────────────────
 network:
   # TCP connection timeout in seconds
   connect_timeout: 30
@@ -37,7 +40,7 @@ network:
   max_redirects: 5
 
   # HTTP User-Agent header
-  user_agent: "ChunkGuard/1.0"
+  user_agent: "ReliaDL/1.0"
 
   # Enable HTTP/2 protocol (recommended for multiplexing)
   http2: true
@@ -49,6 +52,13 @@ network:
   # 0 = unlimited
   # Example: 10485760 = 10 MB/s
   max_bandwidth: 0
+
+  # Proxy configuration (optional)
+  proxy:
+    http_proxy: null                   # e.g., "http://proxy.corp.com:8080"
+    https_proxy: null                  # e.g., "http://user:pass@proxy.corp.com:8080"
+    socks_proxy: null                  # e.g., "socks5h://127.0.0.1:9050"
+    no_proxy: "localhost,127.0.0.1"
 
 # ─── Retry Settings ────────────────────────────────────────────────
 retry:
@@ -71,6 +81,17 @@ retry:
   # Prevents thundering herd when multiple workers retry simultaneously
   # jitter = uniform(0, jitter_factor * computed_delay)
   jitter_factor: 0.5
+
+# ─── Telemetry & Metrics Settings ──────────────────────────────────
+telemetry:
+  metrics:
+    enabled: false                     # Enable Prometheus metrics
+    listen_host: "0.0.0.0"
+    listen_port: 9100
+    path: "/metrics"
+  tracing:
+    enabled: false                     # Enable OpenTelemetry tracing
+    otlp_endpoint: null                # e.g., "http://localhost:4317"
 
 # ─── Logging Settings ──────────────────────────────────────────────
 logging:
@@ -97,3 +118,4 @@ progress:
   # Show individual chunk download/verification events
   # Useful for debugging, noisy for normal use
   show_chunk_details: false
+

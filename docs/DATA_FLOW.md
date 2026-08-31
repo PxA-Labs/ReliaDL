@@ -1,460 +1,130 @@
-# Data Flow & State Machine — ChunkGuard
+# 1. ReliaDL Data Flow and System Architecture
 
-> **Audience**: Software Engineers
-> **Reading time**: ~12 minutes
+This document formally specifies the data flow, state transitions, and architectural interactions within the ReliaDL (formerly ReliaDL) reliable download system. ReliaDL leverages advanced cryptographic primitives, stochastic optimization, and forward error correction to ensure mathematically rigorous fault tolerance.
 
----
+## 2. End-to-End Sequence Architecture
 
-## 1. End-to-End Data Flow
+The system incorporates several novel contributions:
+- **AdaChunk**: Adaptive chunk sizing using the Lyapunov drift-plus-penalty framework.
+- **Homomorphic Hash Aggregation**: $\mathcal{O}(1)$ whole-file verification via LtHash.
+- **Sub-chunk Merkle Localization**: Hierarchical Merkle trees for fine-grained corruption localization.
+- **Predictive Parity Injection**: Forward error correction via a Gilbert-Elliott channel model.
+- **Stochastic Optimal Worker Scheduling**: Restless multi-armed bandit (RMAB) Whittle index policy.
 
-### 1.1 Complete Download Sequence Diagram
+```mermaid
+sequenceDiagram
+    participant User
+    participant DL as Download Engine
+    participant AC as AdaChunk Optimizer
+    participant CM as Chunk Manager
+    participant WS as Whittle Scheduler
+    participant W as Worker
+    participant PE as Parity Encoder
+    participant HH as Homomorphic Hasher
+    participant ML as Merkle Localizer
 
-```
-  User            CLI          Download      Chunk        HTTP       Hash       State       File
-                               Engine       Manager     Client     Verifier   Manager    Assembler
-   │                │              │            │           │          │          │           │
-   │  download cmd  │              │            │           │          │          │           │
-   │───────────────▶│              │            │           │          │          │           │
-   │                │  start()     │            │           │          │          │           │
-   │                │─────────────▶│            │           │          │          │           │
-   │                │              │            │           │          │          │           │
-   │                │              │ ──── Phase 1: Initialize ────    │          │           │
-   │                │              │            │           │          │          │           │
-   │                │              │  load_or_create_state()│          │          │           │
-   │                │              │────────────────────────────────────────────▶│           │
-   │                │              │◀───────────────────────────────────────────│           │
-   │                │              │            │           │          │          │           │
-   │                │              │ ──── Phase 2: Metadata ─────    │          │           │
-   │                │              │            │           │          │          │           │
-   │                │              │            │  HEAD url  │          │          │           │
-   │                │              │────────────────────────▶│          │          │           │
-   │                │              │◀────────────────────────│          │          │           │
-   │                │              │   (file_size, etag,     │          │          │           │
-   │                │              │    accept_ranges)       │          │          │           │
-   │                │              │            │           │          │          │           │
-   │                │              │ ──── Phase 3: Plan ─────────    │          │           │
-   │                │              │            │           │          │          │           │
-   │                │              │ compute_chunks()        │          │          │           │
-   │                │              │───────────▶│           │          │          │           │
-   │                │              │◀───────────│           │          │          │           │
-   │                │              │  (chunk_specs[])       │          │          │           │
-   │                │              │            │           │          │          │           │
-   │                │              │  save_state(PLANNED)   │          │          │           │
-   │                │              │────────────────────────────────────────────▶│           │
-   │                │              │            │           │          │          │           │
-   │                │              │ ──── Phase 4: Download ─────    │          │           │
-   │                │              │            │           │          │          │           │
-   │                │              │  ┌─── Worker Pool (async) ───┐  │          │           │
-   │                │              │  │                           │  │          │           │
-   │                │              │  │  for each pending chunk:  │  │          │           │
-   │                │              │  │    │                      │  │          │           │
-   │                │              │  │    │  GET Range: bytes    │  │          │           │
-   │                │              │  │    │──────────────────────│──▶          │           │
-   │                │              │  │    │◀─────────────────────│──│          │           │
-   │                │              │  │    │  (chunk bytes)       │  │          │           │
-   │                │              │  │    │                      │  │          │           │
-   │                │              │  │    │  streaming hash      │  │          │           │
-   │                │              │  │    │──────────────────────│──│─────────▶│           │
-   │                │              │  │    │◀─────────────────────│──│─────────│           │
-   │                │              │  │    │  (hash match?)       │  │          │           │
-   │                │              │  │    │                      │  │          │           │
-   │                │              │  │    │  update_state()      │  │          │           │
-   │                │              │  │    │──────────────────────│──│──────────│──────────▶│
-   │                │              │  │    │                      │  │          │           │
-   │  progress cb   │              │  │                           │  │          │           │
-   │◀───────────────│◀─────────────│  └───────────────────────────┘  │          │           │
-   │                │              │            │           │          │          │           │
-   │                │              │ ──── Phase 5: Assemble ─────    │          │           │
-   │                │              │            │           │          │          │           │
-   │                │              │                                  │          │  assemble()
-   │                │              │──────────────────────────────────│──────────│──────────▶│
-   │                │              │                                  │          │           │
-   │                │              │                                  │  verify  │           │
-   │                │              │◀─────────────────────────────────│──────────│──────────│
-   │                │              │  (file_hash, verified)          │          │           │
-   │                │              │            │           │          │          │           │
-   │                │              │  save_state(COMPLETE)  │          │          │           │
-   │                │              │────────────────────────────────────────────▶│           │
-   │                │              │            │           │          │          │           │
-   │  result        │              │            │           │          │          │           │
-   │◀───────────────│◀─────────────│            │           │          │          │           │
-   │                │              │            │           │          │          │           │
+    User->>DL: Request(URL)
+    DL->>AC: OptimizeChunkSize(ChannelState)
+    AC-->>DL: OptimalSize(S*)
+    DL->>CM: InitializeChunks(FileLength, S*)
+    CM->>PE: GenerateParityAllocations()
+    PE-->>CM: ParityChunks(P)
+    DL->>WS: ScheduleWorkers()
+    WS->>W: Dispatch(OptimalAllocation)
+    W->>W: Download(Chunk)
+    W->>W: DualHash(SHA256, LtHash) + BuildMerkleTree()
+    W-->>CM: ChunkData, StreamHash, LtHash, MerkleRoot
+    CM->>HH: VerifyChunkHash(StreamHash)
+    alt Hash Valid
+        HH-->>CM: [PASS] Verification Complete
+        CM->>CM: Mark COMPLETED
+    else Hash Invalid
+        HH-->>CM: [FAIL] Verification Error
+        CM->>ML: LocalizeCorruption(MerkleTree)
+        ML-->>CM: SubChunkCorruptions(Indices)
+        CM->>CM: Mark LOCALIZING -> PARITY_RECOVERY
+    end
+    CM->>HH: AggregateLtHash()
+    HH-->>DL: O(1) Verification Result
 ```
 
----
+## 3. State Machine Formalisms
 
-## 2. Download State Machine
+### 3.1 Download State Machine
 
-### 2.1 Top-Level Download States
+The download lifecycle encompasses the initialization, stochastic scheduling, targeted localization, parity recovery, and homomorphic verification phases.
 
-```
-                         ┌──────────┐
-                         │          │
-        ┌───────────────▶│ PENDING  │
-        │                │          │
-        │                └────┬─────┘
-        │                     │
-        │              HEAD request +
-        │              chunk planning
-        │                     │
-        │                     ▼
-        │              ┌─────────────┐
-        │              │             │
-        │              │ IN_PROGRESS │◄──── resume()
-        │              │             │
-        │              └──┬──────┬───┘
-        │                 │      │
-        │    all chunks   │      │  unrecoverable
-        │    complete     │      │  error
-        │                 │      │
-        │                 ▼      │
-        │           ┌──────────┐ │
-        │           │          │ │
-        │           │ASSEMBLING│ │
-        │           │          │ │
-        │           └────┬─────┘ │
-        │                │       │
-        │           assembly     │
-        │           complete     │
-        │                │       │
-        │                ▼       │
-        │           ┌──────────┐ │
-        │           │          │ │
-        │           │VERIFYING │ │
-        │           │          │ │
-        │           └──┬────┬──┘ │
-        │              │    │    │
-        │         hash │    │    │
-        │        match │    │    │
-        │              │    │ hash mismatch
-        │              ▼    │    │
-        │        ┌──────────┐   │
-        │        │          │   │
-        │        │ COMPLETE │   │
-        │        │          │   │
-        │        └──────────┘   │
-        │                       │
-        │                       ▼
-        │                ┌──────────┐
-        │                │          │
-        │                │  FAILED  │
-        │                │          │
-        │                └──────────┘
-        │
-        │  cancel()
-        │                ┌──────────┐
-        └────────────────│CANCELLED │
-         (from any       │          │
-          active state)  └──────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> INITIALIZED
+    INITIALIZED --> ALLOCATING : AdaChunk Optimizer
+    ALLOCATING --> DOWNLOADING : Whittle Scheduler
+    DOWNLOADING --> ASSEMBLING : All Chunks Downloaded
+    DOWNLOADING --> PARITY_RECOVERY : Chunk Failure Detected
+    PARITY_RECOVERY --> LOCALIZING : Sub-chunk Analysis
+    LOCALIZING --> DOWNLOADING : Targeted Retry
+    PARITY_RECOVERY --> ASSEMBLING : Forward Error Correction [PASS]
+    ASSEMBLING --> VERIFYING : Homomorphic Aggregation
+    VERIFYING --> COMPLETED : LtHash [PASS]
+    VERIFYING --> FAILED : LtHash [FAIL]
+    COMPLETED --> [*]
+    FAILED --> [*]
 ```
 
-### 2.2 State Transition Table
+### 3.2 Chunk State Machine
 
-| From State | Event | To State | Side Effects |
-|---|---|---|---|
-| `PENDING` | Start download | `IN_PROGRESS` | HEAD request, compute chunks, save state |
-| `IN_PROGRESS` | All chunks COMPLETE | `ASSEMBLING` | Trigger file assembly |
-| `IN_PROGRESS` | Unrecoverable error | `FAILED` | Log error, save state |
-| `IN_PROGRESS` | User cancels | `CANCELLED` | Save state, cleanup workers |
-| `IN_PROGRESS` | Process crash | `IN_PROGRESS`* | State persisted, resume on restart |
-| `ASSEMBLING` | Assembly complete | `VERIFYING` | Start whole-file hash computation |
-| `ASSEMBLING` | Assembly error | `FAILED` | Log error, save state |
-| `VERIFYING` | Hash matches | `COMPLETE` | Cleanup chunks, save state |
-| `VERIFYING` | Hash mismatch | `FAILED` | Identify bad chunks, save state |
-| `FAILED` | User retries | `IN_PROGRESS` | Re-queue failed chunks |
-| `CANCELLED` | User resumes | `IN_PROGRESS` | Re-queue pending chunks |
+Individual chunks follow a rigorous progression to ensure integrity at the sub-chunk granularity.
 
-*On crash, the state on disk remains `IN_PROGRESS`. On restart, the engine re-validates chunks and resumes.
-
----
-
-### 2.3 Chunk State Machine
-
-```
-     ┌──────────┐
-     │          │
-     │ PENDING  │◄──────────────────────────────┐
-     │          │                                │
-     └────┬─────┘                                │
-          │                                      │
-     worker picks up                        retry (attempt
-     chunk from queue                       < max_attempts)
-          │                                      │
-          ▼                                      │
-    ┌───────────┐                                │
-    │           │                                │
-    │DOWNLOADING│                                │
-    │           │                                │
-    └──┬─────┬──┘                                │
-       │     │                                   │
-  bytes│     │ error                             │
-  received   │ (timeout,                         │
-  + hash     │  connection                       │
-  verified   │  reset, etc.)                     │
-       │     │                                   │
-       │     ▼                                   │
-       │  ┌──────────┐      attempt              │
-       │  │          │      < max    ────────────┘
-       │  │  FAILED  │──────────────┘
-       │  │          │
-       │  └────┬─────┘
-       │       │
-       │       │ attempt >= max_attempts
-       │       │
-       │       ▼
-       │  ┌──────────┐
-       │  │          │
-       │  │ABANDONED │  (terminal — requires manual intervention)
-       │  │          │
-       │  └──────────┘
-       │
-       ▼
-  ┌──────────┐
-  │          │
-  │ COMPLETE │  (terminal — chunk verified and stored)
-  │          │
-  └──────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING
+    PENDING --> SCHEDULED : Whittle Index Assigned
+    SCHEDULED --> DOWNLOADING : Worker Dispatched
+    DOWNLOADING --> VERIFYING : Stream Complete
+    VERIFYING --> COMPLETED : Hash [PASS]
+    VERIFYING --> LOCALIZING : Hash [FAIL]
+    LOCALIZING --> PARITY_RECOVERY : Sub-chunk Corruptions Identified
+    PARITY_RECOVERY --> PARITY_RECOVERED : FEC Successful
+    PARITY_RECOVERED --> COMPLETED
+    PARITY_RECOVERY --> FAILED : FEC Exhausted
+    FAILED --> RETRYING : Backoff
+    RETRYING --> PENDING
+    COMPLETED --> [*]
 ```
 
----
+## 4. Data Path Formulations
 
-## 3. Data Flow Through Components
+### 4.1 Chunk Download and Dual Hashing
 
-### 3.1 Chunk Download Data Path
+During the download phase, Workers perform a concurrent dual-hash computation: a standard SHA-256 stream hash and a lattice-based homomorphic hash (LtHash). The optimal chunk size $S^*$ is determined continuously via AdaChunk, optimizing the trade-off between throughput and failure penalty:
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                    Single Chunk Download Flow                     │
-├──────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  HTTP Server                                                     │
-│      │                                                           │
-│      │ TCP stream (TLS encrypted)                                │
-│      │                                                           │
-│      ▼                                                           │
-│  httpx.AsyncClient                                               │
-│      │                                                           │
-│      │ Decrypted byte chunks (64 KB buffers)                     │
-│      │                                                           │
-│      ▼                                                           │
-│  ┌─────────────────────────────────────┐                         │
-│  │      Streaming Tee Pipeline         │                         │
-│  │                                     │                         │
-│  │  bytes ──┬──▶ hashlib.sha256.update()   ← hash accumulation  │
-│  │          │                                                    │
-│  │          └──▶ aiofiles.write(bytes)      ← disk write         │
-│  │                                                               │
-│  │  Memory: O(buffer_size) = O(64 KB)      ← bounded!           │
-│  └─────────────────────────────────────┘                         │
-│      │                                                           │
-│      │ After all bytes received                                  │
-│      │                                                           │
-│      ▼                                                           │
-│  hash_context.hexdigest()                                        │
-│      │                                                           │
-│      │ computed_hash                                             │
-│      │                                                           │
-│      ▼                                                           │
-│  hmac.compare_digest(computed, expected)                          │
-│      │                                                           │
-│      ├── ✅ → ChunkResult(COMPLETE)                               │
-│      └── ❌ → ChunkResult(FAILED, reason=HASH_MISMATCH)           │
-│                                                                  │
-└──────────────────────────────────────────────────────────────────┘
-```
+$$ S^* = \arg\max_{S} \mathbb{E}[U(S) - V \cdot Q(t)] $$
 
-### 3.2 File Assembly Data Path
+Simultaneously, the worker constructs a hierarchical Merkle tree over sub-chunk blocks $B$ to support subsequent error localization.
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                    File Assembly Flow                             │
-├──────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  Chunk Files on Disk (ordered by index)                          │
-│                                                                  │
-│  chunk_00000.dat ─┐                                              │
-│  chunk_00001.dat ─┤                                              │
-│  chunk_00002.dat ─┤                                              │
-│  ...              ├──▶ Sequential Read                           │
-│  chunk_12799.dat ─┘        │                                     │
-│                            │                                     │
-│                            ▼                                     │
-│                    ┌───────────────┐                              │
-│                    │  Assembly Tee │                              │
-│                    │               │                              │
-│                    │  bytes ──┬──▶ per_chunk_hash.update()        │
-│                    │         │    (re-verify each chunk)          │
-│                    │         │                                    │
-│                    │         ├──▶ whole_file_hash.update()        │
-│                    │         │    (accumulate full file hash)     │
-│                    │         │                                    │
-│                    │         └──▶ output_file.write()             │
-│                    │              (write to final location)       │
-│                    └───────────────┘                              │
-│                            │                                     │
-│                            │ After last chunk processed           │
-│                            │                                     │
-│                            ▼                                     │
-│                    whole_file_hash.hexdigest()                    │
-│                            │                                     │
-│                            ▼                                     │
-│                    Compare with expected file hash                │
-│                            │                                     │
-│                    ✅ → SUCCESS (rename temp → final)              │
-│                    ❌ → FAILURE (identify bad chunks)              │
-│                                                                  │
-└──────────────────────────────────────────────────────────────────┘
-```
+### 4.2 Assembly and Homomorphic Aggregation
 
----
+Traditional assembly mechanisms require $\mathcal{O}(N)$ re-reading of the assembled file to verify its integrity. ReliaDL implements an $\mathcal{O}(1)$ whole-file verification scheme utilizing homomorphic hashing. The final file hash $\mathcal{H}(F)$ is defined mathematically as the modulo sum of individual chunk hashes:
 
-## 4. Concurrency Flow
+$$ \mathcal{H}(F) = \sum_{i=1}^N \mathcal{H}(C_i) \pmod q $$
 
-### 4.1 Worker Lifecycle
+This guarantees verification without subsequent disk I/O penalties.
 
-```
-Download Engine
-      │
-      │ creates N worker coroutines
-      │
-      ▼
-  ┌────────────────────────────────────────────────────────────┐
-  │                  asyncio Event Loop                        │
-  │                                                            │
-  │   ┌─────────┐    ┌─────────┐    ┌─────────┐              │
-  │   │Worker 0 │    │Worker 1 │    │Worker 2 │    ...        │
-  │   └────┬────┘    └────┬────┘    └────┬────┘              │
-  │        │              │              │                    │
-  │        ▼              ▼              ▼                    │
-  │   ┌──────────────────────────────────────────┐           │
-  │   │          Chunk Queue (asyncio.Queue)      │           │
-  │   │                                           │           │
-  │   │  [chunk_5] [chunk_42] [chunk_100] ...     │           │
-  │   │                                           │           │
-  │   └──────────────────────────────────────────┘           │
-  │        │              │              │                    │
-  │   get_nowait()   get_nowait()   get_nowait()             │
-  │        │              │              │                    │
-  │        ▼              ▼              ▼                    │
-  │   ┌──────────────────────────────────────────┐           │
-  │   │     asyncio.Semaphore(max_workers)        │           │
-  │   │     (limits active HTTP connections)      │           │
-  │   └──────────────────────────────────────────┘           │
-  │        │              │              │                    │
-  │   async with sem  async with sem  async with sem         │
-  │        │              │              │                    │
-  │        ▼              ▼              ▼                    │
-  │   download_chunk  download_chunk  download_chunk         │
-  │   verify_hash     verify_hash     verify_hash            │
-  │   save_to_disk    save_to_disk    save_to_disk           │
-  │        │              │              │                    │
-  │        ▼              ▼              ▼                    │
-  │   report_result   report_result   report_result          │
-  │   update_state    update_state    update_state           │
-  │                                                            │
-  └────────────────────────────────────────────────────────────┘
-```
+## 5. Concurrency and Optimal Scheduling
 
-### 4.2 Retry Flow Within Worker
+The Whittle Scheduler models dynamic worker-to-source allocation as a Restless Multi-Armed Bandit (RMAB) problem. By computing the Whittle index $W_i(s)$ for each source stream state $s$, the scheduler maximizes global throughput under strict concurrency constraints. 
 
-```
-Worker picks up chunk from queue
-         │
-         ▼
-    attempt = 0
-         │
-         ▼
-   ┌─────────────┐
-   │  Try Download│◄────────────────────────────┐
-   └──────┬──────┘                               │
-          │                                      │
-     ┌────┴────┐                                 │
-     │ Success?│                                 │
-     └────┬────┘                                 │
-          │                                      │
-     ┌────┴────┐                                 │
-     │         │                                 │
-    YES       NO                                 │
-     │         │                                 │
-     ▼         ▼                                 │
-  Report    attempt += 1                         │
-  SUCCESS       │                                │
-            ┌───┴────┐                           │
-            │attempt │                           │
-            │< max?  │                           │
-            └───┬────┘                           │
-                │                                │
-           ┌────┴────┐                           │
-           │         │                           │
-          YES       NO                           │
-           │         │                           │
-           ▼         ▼                           │
-      compute    Report                          │
-      delay()    ABANDONED                       │
-           │                                     │
-           ▼                                     │
-      asyncio.sleep(delay)                       │
-           │                                     │
-           └─────────────────────────────────────┘
-```
+$$ W_i(s) = \inf \{ \lambda : \text{Passive action is optimal in state } s \text{ under subsidy } \lambda \} $$
 
----
+## 6. Error Recovery and Localization
 
-## 5. Resume Flow
+### 6.1 Merkle Localization Path
 
-### 5.1 Resume After Crash
+Upon verification failure, the Chunk Manager transitions to the `LOCALIZING` state. The Merkle Localizer executes an $\mathcal{O}(\log(S/B))$ traversal of the previously constructed Merkle tree. By comparing root and intermediate hashes, the system pinpoints corrupt segments at a sub-chunk granularity, entirely eliminating the need for full chunk re-transmission.
 
-```
-  User runs: chunkguard resume state_file.state
-         │
-         ▼
-  ┌──────────────────────────────────┐
-  │  Load state file from disk       │
-  │  Parse JSON → DownloadState      │
-  └──────────┬───────────────────────┘
-             │
-             ▼
-  ┌──────────────────────────────────┐
-  │  Validate state file integrity   │
-  │  - Check version compatibility   │
-  │  - Verify JSON structure         │
-  └──────────┬───────────────────────┘
-             │
-             ▼
-  ┌──────────────────────────────────┐
-  │  Re-validate completed chunks    │
-  │  For each COMPLETE chunk:        │
-  │    - File exists on disk?        │
-  │    - File size correct?          │
-  │    - (Optional) Re-hash chunk    │
-  │  If validation fails:            │
-  │    → Mark chunk as PENDING       │
-  └──────────┬───────────────────────┘
-             │
-             ▼
-  ┌──────────────────────────────────┐
-  │  Reset DOWNLOADING → PENDING     │
-  │  (These were interrupted)        │
-  └──────────┬───────────────────────┘
-             │
-             ▼
-  ┌──────────────────────────────────┐
-  │  Check server file unchanged     │
-  │  - HEAD request                  │
-  │  - Compare ETag / Last-Modified  │
-  │  - Compare Content-Length        │
-  │  If changed:                     │
-  │    → Warn user, restart          │
-  └──────────┬───────────────────────┘
-             │
-             ▼
-  ┌──────────────────────────────────┐
-  │  Queue pending & failed chunks   │
-  │  Resume normal download flow     │
-  └──────────────────────────────────┘
-```
+### 6.2 Predictive Parity Recovery
 
----
+To mitigate latency in high-loss environments, ReliaDL proactively injects lightweight XOR-based parity chunks. The parity injection rate $\rho$ is governed by a Gilbert-Elliott channel model estimator, distinguishing between "Good" and "Bad" network states. The `PARITY_RECOVERY` state allows zero-RTT recovery from parity, proceeding to backoff-based `RETRYING` only upon parity exhaustion.
 
 ## 6. Error Propagation Flow
 
@@ -490,9 +160,64 @@ Worker picks up chunk from queue
             NO        YES
              │         │
              ▼         ▼
-         Continue   Mark download
-         (other     as FAILED
-         chunks     Notify user
-         may        via callback
-         succeed)   & exit code
+          Continue   Mark download
+          (other     as FAILED
+          chunks     Notify user
+          may        via callback
+          succeed)   & exit code
+```
+
+---
+
+## 7. Direct Sparse Write Data Flow
+
+```
+Download Initialized (--direct-write)
+       │
+       ▼
+[ Pre-allocate target file ] ──▶ posix_fallocate(fd, 0, file_size)
+       │
+       ▼
+[ Launch Worker Coroutines ]
+       │
+       ├── Worker 0 ──▶ fetch chunk 0 ──▶ verify SHA-256 ──▶ os.pwrite(fd, buf, 0)
+       ├── Worker 1 ──▶ fetch chunk 1 ──▶ verify SHA-256 ──▶ os.pwrite(fd, buf, 8388608)
+       └── Worker N ──▶ fetch chunk N ──▶ verify SHA-256 ──▶ os.pwrite(fd, buf, offset_N)
+       │
+       ▼
+[ All Chunks Verified & Written ]
+       │
+       ▼
+[ os.fsync(fd) & Whole-File SHA-256 Check ]
+       │
+       ▼
+[ Download Complete — Zero Assembly Delay ]
+```
+
+---
+
+## 8. Manifest-Driven Verification Flow
+
+```
+[ User provides .cgmanifest ]
+       │
+       ▼
+[ Verify Cryptographic Signature (Ed25519) ]
+       │
+       ├── ❌ Signature Invalid ──▶ Abort (Untrusted Manifest)
+       └── ✅ Signature Valid   ──▶ Load pre-authenticated chunk hashes & mirrors
+                                          │
+                                          ▼
+                             [ Concurrent Range GETs ]
+                             [ across prioritized mirrors ]
+                                          │
+                                          ▼
+                             [ Per-chunk SHA-256 checked ]
+                             [ against signed manifest ]
+                                          │
+                                          ▼
+                             [ Match Merkle Tree Root ]
+                                          │
+                                          ▼
+                             [ Success — Cryptographic Proof ]
 ```

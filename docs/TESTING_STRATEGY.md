@@ -1,4 +1,4 @@
-# Testing Strategy — ChunkGuard
+# Testing Strategy — ReliaDL
 
 > **Audience**: QA Engineers, Developers
 > **Reading time**: ~10 minutes
@@ -99,7 +99,7 @@ class TestHashComputation:
     
     def test_known_hash(self):
         """Verify hash of known input."""
-        data = b"Hello, ChunkGuard!"
+        data = b"Hello, ReliaDL!"
         expected = hashlib.sha256(data).hexdigest()
         computed = compute_hash(data)
         assert computed == expected
@@ -344,7 +344,7 @@ class TestFullDownload:
     
     async def test_download_and_verify(self, test_server, tmp_path):
         """Download, verify per-chunk, verify whole-file."""
-        cg = ChunkGuard(DownloadConfig(
+        cg = ReliaDL(DownloadConfig(
             chunk_size_bytes=1_000_000,  # 1 MB chunks → 10 chunks
             max_parallel_workers=2,
         ))
@@ -362,7 +362,7 @@ class TestFullDownload:
     async def test_resume_after_interruption(self, test_server, tmp_path):
         """Interrupt download, resume, verify completion."""
         config = DownloadConfig(chunk_size_bytes=1_000_000, max_parallel_workers=1)
-        cg = ChunkGuard(config)
+        cg = ReliaDL(config)
         
         # Start download and interrupt after 5 chunks
         with pytest.raises(asyncio.CancelledError):
@@ -375,7 +375,7 @@ class TestFullDownload:
             await task
         
         # Resume
-        state_file = tmp_path / ".chunkguard" / "test.bin.state"
+        state_file = tmp_path / ".ReliaDL" / "test.bin.state"
         result = await cg.resume(state_file)
         
         assert result.is_verified
@@ -385,7 +385,7 @@ class TestFullDownload:
         # Configure server to corrupt chunk 3 on first attempt
         test_server.corrupt_chunk(file="test.bin", chunk_index=3, attempts=1)
         
-        cg = ChunkGuard(DownloadConfig(
+        cg = ReliaDL(DownloadConfig(
             chunk_size_bytes=1_000_000,
             max_retries_per_chunk=3,
         ))
@@ -403,7 +403,7 @@ class TestFullDownload:
         """Falls back to single-stream when server doesn't support Range."""
         test_server.disable_range_requests()
         
-        cg = ChunkGuard()
+        cg = ReliaDL()
         result = await cg.download(
             url=test_server.url("test.bin"),
             output_path=tmp_path / "test.bin",
@@ -489,6 +489,10 @@ pytest tests/unit/test_chunk_manager.py::TestChunkComputation::test_exact_divisi
 | `state_manager.py` | 90% | 85% |
 | `download_engine.py` | 85% | 80% |
 | `file_assembler.py` | 90% | 85% |
+| `sparse_writer.py` | 95% | 90% |
+| `rate_limiter.py` | 95% | 90% |
+| `manifest.py` | 95% | 90% |
+| `adapters/` | 90% | 85% |
 | **Overall** | **90%** | **80%** |
 
 ### 7.3 CI Pipeline
@@ -513,3 +517,4 @@ jobs:
       - run: pytest --cov=src --cov-report=xml -v
       - uses: codecov/codecov-action@v3
 ```
+

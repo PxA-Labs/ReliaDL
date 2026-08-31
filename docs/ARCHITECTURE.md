@@ -1,4 +1,4 @@
-# System Architecture — ChunkGuard
+# System Architecture — ReliaDL
 
 > **Audience**: Software Engineers, Architects, Technical Leads
 > **Reading time**: ~20 minutes
@@ -7,7 +7,7 @@
 
 ## 1. Architectural Philosophy
 
-ChunkGuard follows these design principles:
+ReliaDL follows these design principles:
 
 | Principle | Application |
 |---|---|
@@ -111,18 +111,18 @@ class DownloadConfig:
     connect_timeout_seconds: float  # Default: 30.0
     read_timeout_seconds: float     # Default: 300.0
     hash_algorithm: str             # Default: "sha256"
-    state_directory: str            # Default: ".chunkguard"
+    state_directory: str            # Default: ".ReliaDL"
     verify_on_complete: bool        # Default: True
     progress_update_interval: float # Default: 0.5
-    user_agent: str                 # Default: "ChunkGuard/1.0"
+    user_agent: str                 # Default: "ReliaDL/1.0"
     max_bandwidth_bytes_per_sec: int # Default: 0 (unlimited)
 ```
 
 **Configuration Precedence** (highest to lowest):
 1. CLI arguments
-2. Environment variables (`CHUNKGUARD_CHUNK_SIZE`, etc.)
-3. Project config file (`./chunkguard.yaml`)
-4. User config file (`~/.config/chunkguard/config.yaml`)
+2. Environment variables (`ReliaDL_CHUNK_SIZE`, etc.)
+3. Project config file (`./ReliaDL.yaml`)
+4. User config file (`~/.config/ReliaDL/config.yaml`)
 5. Built-in defaults
 
 ---
@@ -317,7 +317,7 @@ After all bytes received:
 To prevent state file corruption on crash:
 
 ```
-1. Write new state to temporary file:   .chunkguard/file.iso.state.tmp
+1. Write new state to temporary file:   .ReliaDL/file.iso.state.tmp
 2. Sync to disk:                         fsync(fd)
 3. Atomic rename:                        rename(.tmp → .state)
 ```
@@ -380,11 +380,11 @@ Where:
 
 ```
 Chunk Files on Disk:
-  .chunkguard/chunks/00000.chunk  (8 MB, verified ✅)
-  .chunkguard/chunks/00001.chunk  (8 MB, verified ✅)
-  .chunkguard/chunks/00002.chunk  (8 MB, verified ✅)
+  .ReliaDL/chunks/00000.chunk  (8 MB, verified ✅)
+  .ReliaDL/chunks/00001.chunk  (8 MB, verified ✅)
+  .ReliaDL/chunks/00002.chunk  (8 MB, verified ✅)
   ...
-  .chunkguard/chunks/12799.chunk  (partial, verified ✅)
+  .ReliaDL/chunks/12799.chunk  (partial, verified ✅)
 
 Assembly:
   1. Open output file for writing
@@ -397,6 +397,68 @@ Assembly:
   5. If match: delete chunk files, mark complete
   6. If mismatch: identify which chunks need re-verification
 ```
+
+---
+
+### 3.9 Direct Sparse File Writer (`sparse_writer.py`)
+
+**Responsibility**: Enable zero-assembly, direct-offset writing to eliminate temporary disk overhead and assembly phase duration.
+
+```
+Option A: Staged Chunk Files (Default)
+  Download ──▶ Staged Chunks (.chunkguard/*.chunk) ──▶ Sequential Assembly ──▶ Final Output
+  Storage Required: 2.1 × File Size (during download)
+
+Option B: Direct Sparse Writing (Enabled via --direct-write)
+  Download ──▶ Pre-allocate File (posix_fallocate) ──▶ Concurrent os.pwrite() at Offsets ──▶ Final Output
+  Storage Required: 1.0 × File Size (zero assembly latency)
+```
+
+| Strategy | Advantages | Trade-offs |
+|---|---|---|
+| **Staged Chunks** | Simple crash recovery; works on all filesystems (including FAT32) | Requires 2.1× disk space; requires sequential assembly pass |
+| **Direct Sparse Write** | 1.0× disk space; zero assembly time post-download; NVMe-optimized | Requires sparse/pwrite filesystem support (POSIX `posix_fallocate` / Windows `SetFileValidData`) |
+
+---
+
+### 3.10 Bandwidth Throttling Subsystem (`rate_limiter.py`)
+
+**Responsibility**: Enforce network egress/ingress bandwidth ceilings to avoid saturating shared links.
+
+* **Algorithm**: Token Bucket with millisecond-resolution replenishment.
+* **Granularity**: Shared across all concurrent coroutine workers.
+* **Zero Busy-Waiting**: Coroutines await `asyncio.sleep()` when bucket tokens are depleted.
+
+```
+       Token Generator (Rate R bytes/sec)
+                      │
+                      ▼
+            ┌──────────────────┐
+            │   Token Bucket   │ ◄── Capacity C bytes (Burst limit)
+            └─────────┬────────┘
+                      │
+        Tokens granted per chunk read buffer (64 KB)
+                      │
+                      ▼
+         [ Coroutine Worker 0..N ]
+```
+
+---
+
+### 3.11 Cloud & Protocol Adapters (`adapters/`)
+
+**Responsibility**: Abstract transport protocol specifics behind a unified async interface (`BaseStorageAdapter`).
+
+* **AWS S3 Adapter**: AWS SigV4 signed Range GETs, multipart awareness, IAM role authentication.
+* **GCS Adapter**: Google Cloud Storage Range requests with OAuth2 and Application Default Credentials.
+* **Azure Blob Adapter**: Azure REST `x-ms-range` requests with SAS tokens and Managed Identity.
+* **Proxy Tunneling**: HTTP `CONNECT` and SOCKS5 (RFC 1928) tunneling with custom CA certificates.
+
+---
+
+### 3.12 Manifest & Merkle Verification Engine (`manifest.py`)
+
+**Responsibility**: Parse, validate, and verify signed `.cgmanifest` catalogs and compute binary Merkle Trees for streaming chunk authentication.
 
 ---
 
@@ -414,7 +476,7 @@ All data structures are defined as immutable dataclasses or Pydantic models:
 ### 4.2 Exception Hierarchy (`exceptions.py`)
 
 ```
-ChunkGuardError (base)
+ReliaDLError (base)
 ├── ConfigurationError
 ├── NetworkError
 │   ├── ConnectionError
@@ -511,6 +573,8 @@ Structured JSON logging via `structlog`:
 | D5 | Per-chunk hash in manifest | Hash only whole file | Enables selective re-download; pinpoints corruption location |
 | D6 | Atomic state file writes | Append-only log, database | Simple; crash-safe; no external dependencies |
 | D7 | HTTP Range requests | Custom chunking protocol | Works with any standard HTTP server; CDN-compatible |
+| D8 | Dual storage modes (Staged vs Direct Sparse) | Single storage backend | Allows low-memory systems (direct sparse) and legacy filesystems (staged chunks) |
+| D9 | Token Bucket for rate limiting | Leaky Bucket, TCP window throttling | Allows smooth bursts up to bucket capacity while enforcing strict average bandwidth limits |
 
 ---
 
@@ -553,3 +617,4 @@ The architecture is designed for future extension:
 | Progress Reporters | Observer pattern | Web UI, Slack notifications, webhook |
 | Storage Backends | Abstract `Storage` interface | Cloud storage, NFS, memory (testing) |
 | Authentication | Header injection middleware | OAuth, API keys, custom auth |
+

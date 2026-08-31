@@ -1,4 +1,4 @@
-# Performance — ChunkGuard
+# Performance — ReliaDL
 
 > **Audience**: Engineers, Operations
 > **Reading time**: ~8 minutes
@@ -143,6 +143,16 @@ State file writes:
   Impact: Negligible — single JSON write, atomic rename
 ```
 
+### 3.4 Direct Sparse Writes vs Staged Assembly Performance
+
+| Metric | Staged Chunks Mode | Direct Sparse Mode (`--direct-write`) |
+|---|---|---|
+| **Peak Storage Overhead** | 2.1× File Size | **1.0× File Size** |
+| **Post-Download Assembly Delay** | ~40s per 100 GB (NVMe) | **0.0s (Instant finalization)** |
+| **Total Disk Write Operations** | 2× (Write chunks + Read/Write Assembly) | **1× (Write directly to target offset)** |
+| **Random I/O Overhead** | Isolated chunk files | Positional `pwrite()` per chunk |
+| **Filesystem Compatibility** | All filesystems (ext4, NTFS, APFS, FAT32) | POSIX `posix_fallocate` / NTFS Sparse |
+
 ---
 
 ## 4. Network Efficiency
@@ -283,3 +293,4 @@ network:
 During download:  2.1 × file_size  (chunks + partial output + state)
 After completion:  1.0 × file_size  (output only, chunks cleaned up)
 ```
+

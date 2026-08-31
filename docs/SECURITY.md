@@ -1,4 +1,4 @@
-# Security Considerations — ChunkGuard
+# Security Considerations — ReliaDL
 
 > **Audience**: Security Engineers, Auditors, DevOps
 > **Reading time**: ~10 minutes
@@ -24,7 +24,7 @@
 │  TRUSTED BOUNDARY: Local System                                  │
 │                                                                  │
 │  ┌──────────────┐     ┌──────────────┐     ┌────────────────┐   │
-│  │ ChunkGuard   │     │ State Files  │     │ Chunk/Output   │   │
+│  │ ReliaDL   │     │ State Files  │     │ Chunk/Output   │   │
 │  │ Process      │     │ (.state)     │     │ Files          │   │
 │  └──────┬───────┘     └──────────────┘     └────────────────┘   │
 │         │                                                        │
@@ -60,6 +60,9 @@
 | T8 | Credential leakage in logs | Information Disclosure | Low | High | Headers with "auth"/"token"/"key" are redacted in logs |
 | T9 | Path traversal via server-provided filenames | Elevation | Low | High | Output paths are user-specified, never derived from server |
 | T10 | Symlink attacks in chunk directory | Elevation | Low | Medium | Resolve symlinks before writing, create dirs with restricted perms |
+| T11 | Manifest catalog tampering | Tampering | Low | High | Cryptographic signatures (Ed25519) + Merkle root verification |
+| T12 | Forward proxy credential interception | Information Disclosure | Low | High | HTTPS CONNECT end-to-end TLS tunnels |
+| T13 | Disk allocation exhaustion | Availability | Low | Medium | Pre-allocation check (`posix_fallocate`) and disk quotas |
 
 ---
 
@@ -231,9 +234,10 @@ Mitigation:
 
 ## 6. Compliance Notes
 
-| Standard | Relevance | ChunkGuard Compliance |
+| Standard | Relevance | ReliaDL Compliance |
 |---|---|---|
 | **FIPS 140-2** | Cryptographic module validation | Uses Python `hashlib` backed by OpenSSL (FIPS-validated builds available) |
 | **NIST SP 800-131A** | Cryptographic algorithm recommendations | SHA-256 is approved through 2030+ |
 | **SOC 2 Type II** | Security controls for data integrity | Per-chunk + whole-file verification; audit logging |
 | **GDPR** | Data protection | No PII stored; downloads are user-initiated; logs contain no PII |
+
