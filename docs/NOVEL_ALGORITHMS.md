@@ -63,6 +63,25 @@ For each time slot t = 0, 1, 2, ... do:
 End For
 ```
 
+### AdaChunk Optimization Cycle
+
+```mermaid
+graph TD
+    NET["Channel State Observation s_t<br/>(RTT_t, sigma_RTT, p_t, G_t, BDP_t)"]
+    VIRT["Virtual Throughput Queue Q_t<br/>(Target Constraint: G_min)"]
+    KKT["Lyapunov Drift-Plus-Penalty Solver<br/>B_t* = argmin V*C(B, s_t) - Q_t*G(B, s_t)"]
+    EXEC["Worker Range Request Dispatch<br/>(Fetch B_t* Bytes via HTTP/2)"]
+    MEAS["Measure Observed Goodput g_t & Packet Loss"]
+    UPDATE["Queue Drift Update<br/>Q_{t+1} = max(Q_t - g_t + G_min, 0)"]
+
+    NET --> KKT
+    VIRT --> KKT
+    KKT --> EXEC
+    EXEC --> MEAS
+    MEAS --> UPDATE
+    UPDATE --> VIRT
+```
+
 **Complexity:** The per-slot optimization admits a closed-form solution via Karush-Kuhn-Tucker (KKT) conditions, yielding a time complexity of $\mathcal{O}(1)$ per chunk decision.
 
 ## 2. Homomorphic Hash Aggregation via Lattice-Based Hashing (LtHash)
@@ -100,6 +119,32 @@ ReliaDL employs a dual-layer verification strategy: SHA-256 is used for per-chun
 | Post-Assembly Verify Time | $\mathcal{O}(N)$ (Disk I/O bound) | $\mathcal{O}(1)$ (In-memory add) |
 | Homomorphic | [FAIL] | [PASS] |
 | Quantum Resistance | Post-quantum secure | Post-quantum secure (SIS) |
+
+### Homomorphic Verification Flowchart
+
+```mermaid
+graph LR
+    subgraph StreamDownload["In-Flight Chunk Processing"]
+        C0["Chunk c_0"] --> H0["h_0 = LtHash(c_0)"]
+        C1["Chunk c_1"] --> H1["h_1 = LtHash(c_1)"]
+        CK["Chunk c_k-1"] --> HK["h_k-1 = LtHash(c_k-1)"]
+    end
+
+    subgraph AlgebraicAggregation["O(1) In-Memory Algebraic Accumulation"]
+        ADD["H_file = sum(h_i) mod p<br/>(Lattice SIS-Hard)"]
+    end
+
+    subgraph VerificationGate["Instantaneous Verification"]
+        ROOT["Expected Root Hash"]
+        CMP{"H_file == Expected?"}
+        VALID["Whole-File Integrity Confirmed<br/>(No Disk Re-Read Needed)"]
+    end
+
+    H0 & H1 & HK --> ADD
+    ADD --> CMP
+    ROOT --> CMP
+    CMP -- "Pass" --> VALID
+```
 
 ## 3. Sub-Chunk Merkle Localization
 
@@ -145,6 +190,24 @@ Require: Received chunk data, expected RootHash
 4. Return S_corrupt
 ```
 
+### Merkle Localization Tree Structure
+
+```mermaid
+graph TD
+    ROOT["Merkle Root (Chunk Hash in Manifest)"]
+    N0["Node 0 (H_0-1)"]
+    N1["Node 1 (H_2-3)"]
+    L0["Segment Leaf 0 (4 KB)"]
+    L1["Segment Leaf 1 (4 KB - CORRUPT)"]
+    L2["Segment Leaf 2 (4 KB)"]
+    L3["Segment Leaf 3 (4 KB)"]
+
+    ROOT --> N0 & N1
+    N0 --> L0
+    N0 -. "Binary Search Path" .-> L1
+    N1 --> L2 & L3
+```
+
 ## 4. Predictive Parity Injection
 
 ### Problem Formulation
@@ -157,7 +220,7 @@ We model the network channel using a two-state Markov chain: Good (G) and Bad (B
 For a sequence of $k$ data chunks, we generate $r$ parity chunks using systematic XOR coding. Parity chunk $P_j$ is the XOR sum of a designated subset of data chunks. The code rate is $R = \frac{k}{k+r}$. The receiver can recover from up to $r$ lost chunks.
 
 ### Adaptive Injection Rate Algorithm
-Using the forward algorithm, we estimate the channel state probabilities $\pi_G(t)$ and $\pi_B(t). The expected loss rate is:
+Using the forward algorithm, we estimate the channel state probabilities $\pi_G(t)$ and $\pi_B(t)$. The expected loss rate is:
 
 $$ \hat{p}(t) = \pi_G(t) \cdot \epsilon_G + \pi_B(t) \cdot \epsilon_B $$
 
@@ -169,6 +232,20 @@ subject to $r \leq r_{\max}$ to tightly bound bandwidth overhead.
 
 ### Recovery Protocol
 Upon detecting a lost or corrupted chunk, the receiver reconstructs it in $\mathcal{O}(B)$ computational steps using the available $k$ data chunks and parity chunks, achieving zero-RTT recovery. The bandwidth overhead ratio is $\frac{r}{k+r}$.
+
+### Gilbert-Elliott Channel State Transition Model
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    GOOD: Good State (G)<br/>Low Loss Rate eps_G
+    BAD: Bad State (B)<br/>High Loss Rate eps_B
+
+    GOOD --> BAD: Transition Probability p_GB
+    BAD --> GOOD: Recovery Probability p_BG
+    GOOD --> GOOD: 1 - p_GB
+    BAD --> BAD: 1 - p_BG
+```
 
 ## 5. Whittle Index Worker Scheduling
 
@@ -212,6 +289,32 @@ Require: K available workers, N sources
      Issue redundant request to source with max Whittle Index
 ```
 
+### Whittle Index Allocation and Straggler Mitigation Workflow
+
+```mermaid
+graph TB
+    subgraph SourceObservation["Dynamic Source Monitoring"]
+        S1["Source 1 State: s_1(t)"] --> W1["Whittle Index W_1(s_1)"]
+        S2["Source 2 State: s_2(t)"] --> W2["Whittle Index W_2(s_2)"]
+        SM["Source M State: s_M(t)"] --> WM["Whittle Index W_M(s_M)"]
+    end
+
+    subgraph AllocationPolicy["Asymptotically Optimal Arm Activation"]
+        SORT["Priority Queue Sort<br/>W_(1) >= W_(2) >= ... >= W_(M)"]
+        ACT["Activate Top-K Arms with Dedicated Workers"]
+    end
+
+    subgraph StragglerGuard["Speculative Tail Mitigation"]
+        MON["Elapsed Time > alpha * median?"]
+        SPEC["Speculative Redundant Request to Max Whittle Arm"]
+    end
+
+    W1 & W2 & WM --> SORT
+    SORT --> ACT
+    ACT --> MON
+    MON -- "Yes (Straggler Detected)" --> SPEC
+```
+
 ## 6. Integrated System: Algorithmic Pipeline
 
 The ReliaDL architecture executes these algorithms in a synchronized pipeline to guarantee optimality bounds and minimal overhead.
@@ -222,6 +325,16 @@ The ReliaDL architecture executes these algorithms in a synchronized pipeline to
 3. **Download & FEC:** Predictive Parity Injection attaches zero-RTT recovery codes based on real-time channel state.
 4. **Verification (Chunk):** Sub-Chunk Merkle Localization isolates byte-level errors if parity recovery fails, minimizing re-downloads.
 5. **Verification (File):** LtHash continuously aggregates chunk hashes, concluding with an $\mathcal{O}(1)$ whole-file validation pass.
+
+### Integrated Algorithmic Pipeline Flowchart
+
+```mermaid
+graph LR
+    A["1. Whittle Scheduler<br/>(Worker Allocation)"] --> B["2. AdaChunk Optimizer<br/>(Dynamic Sizing B_t*)"]
+    B --> C["3. Parity Injection<br/>(Zero-RTT FEC)"]
+    C --> D["4. Merkle Verification<br/>(4 KB Localization)"]
+    D --> E["5. LtHash Aggregator<br/>(O(1) Whole-File Integrity)"]
+```
 
 Combined time complexity per byte downloaded is $\mathcal{O}(1)$ with negligible constant factors governed by XOR operations and finite field modular additions.
 

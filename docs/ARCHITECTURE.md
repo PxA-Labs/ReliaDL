@@ -22,55 +22,59 @@ ReliaDL follows these design principles:
 
 ## 2. High-Level Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                              CLI Interface                               │
-│                          (main.py / click)                               │
-├──────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  ┌────────────────┐    ┌──────────────────┐    ┌──────────────────────┐  │
-│  │  Config Layer   │    │  Download Engine  │    │   State Manager     │  │
-│  │  (config.py)    │───▶│  (download_      │◀──▶│   (state_           │  │
-│  │                 │    │   engine.py)      │    │    manager.py)      │  │
-│  └────────────────┘    └────────┬─────────┘    └──────────┬───────────┘  │
-│                                 │                          │              │
-│                    ┌────────────┼────────────┐             │              │
-│                    ▼            ▼            ▼             │              │
-│              ┌──────────┐ ┌──────────┐ ┌──────────┐       │              │
-│              │ Worker 1 │ │ Worker 2 │ │ Worker N │       │              │
-│              │ (async)  │ │ (async)  │ │ (async)  │       │              │
-│              └─────┬────┘ └─────┬────┘ └─────┬────┘       │              │
-│                    │            │            │             │              │
-│                    ▼            ▼            ▼             │              │
-│              ┌─────────────────────────────────────┐      │              │
-│              │         Chunk Manager               │      │              │
-│              │         (chunk_manager.py)           │      │              │
-│              └─────────────────┬───────────────────┘      │              │
-│                                │                          │              │
-│                    ┌───────────┴───────────┐              │              │
-│                    ▼                       ▼              │              │
-│              ┌──────────────┐       ┌──────────────┐      │              │
-│              │ Hash Verifier│       │ Retry Handler│      │              │
-│              │ (hash_       │       │ (retry_      │      │              │
-│              │  verifier.py)│       │  handler.py) │      │              │
-│              └──────────────┘       └──────────────┘      │              │
-│                                                           │              │
-│              ┌────────────────────────────────────────────┘              │
-│              ▼                                                           │
-│        ┌──────────────┐                                                  │
-│        │File Assembler │                                                 │
-│        │(file_         │                                                 │
-│        │ assembler.py) │                                                 │
-│        └──────────────┘                                                  │
-│                                                                          │
-├──────────────────────────────────────────────────────────────────────────┤
-│                          Cross-Cutting Concerns                          │
-│              ┌──────────┐  ┌──────────┐  ┌──────────────┐               │
-│              │ Logger   │  │ Models   │  │ Exceptions   │               │
-│              │(logger.py│  │(models.py│  │(exceptions.py│               │
-│              │)         │  │)         │  │)             │               │
-│              └──────────┘  └──────────┘  └──────────────┘               │
-└──────────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph PresentationLayer["Presentation Layer"]
+        CLI["CLI Interface<br/>(main.py / click)"]
+    end
+
+    subgraph OrchestrationLayer["Orchestration & Stochastic Control"]
+        CONF["Config Layer<br/>(config.py)"]
+        ENG["Download Engine<br/>(download_engine.py)"]
+        SM["State Manager<br/>(state_manager.py)"]
+        AC["AdaChunk Optimizer<br/>(Lyapunov Control)"]
+        WS["Whittle Scheduler<br/>(RMAB Policy)"]
+    end
+
+    subgraph ConcurrencyLayer["Concurrent Worker Pool"]
+        W1["Worker 1 (async)"]
+        W2["Worker 2 (async)"]
+        WN["Worker N (async)"]
+    end
+
+    subgraph ChunkLifecycle["Chunk Lifecycle & Recovery"]
+        CM["Chunk Manager<br/>(chunk_manager.py)"]
+        PE["Parity Engine<br/>(Gilbert-Elliott FEC)"]
+        HV["Hash Verifier & LtHash<br/>(hash_verifier.py)"]
+        ML["Merkle Localizer<br/>(Sub-Chunk Analysis)"]
+        RH["Retry Handler<br/>(retry_handler.py)"]
+    end
+
+    subgraph StorageLayer["Assembly & Direct Storage"]
+        FA["File Assembler / Direct Writer<br/>(file_assembler.py / os.pwrite)"]
+        TARGET["Assembled Payload File"]
+    end
+
+    subgraph CrossCutting["Cross-Cutting Concerns"]
+        LOG["Logger (logger.py)"]
+        MOD["Models (models.py)"]
+        EXC["Exceptions (exceptions.py)"]
+    end
+
+    CLI --> CONF
+    CLI --> ENG
+    ENG <--> SM
+    ENG --> AC
+    ENG --> WS
+    ENG --> CM
+    CM --> PE
+    ENG --> W1 & W2 & WN
+    W1 & W2 & WN --> HV
+    HV --> ML
+    HV --> RH
+    HV --> FA
+    FA --> TARGET
+    SM -. "State Sync" .-> FA
 ```
 
 ---
@@ -147,26 +151,18 @@ INITIALIZE → METADATA → PLAN → DOWNLOAD → VERIFY → ASSEMBLE → FINALI
 
 #### Worker Pool Design
 
-```
-                    ┌─────────────────────┐
-                    │   Download Engine    │
-                    │                     │
-                    │  ┌───────────────┐  │
-                    │  │  Chunk Queue   │  │
-                    │  │  (asyncio.Q)   │  │
-                    │  └───────┬───────┘  │
-                    │          │          │
-                    │    ┌─────┼─────┐    │
-                    │    ▼     ▼     ▼    │
-                    │  ┌───┐┌───┐┌───┐   │
-                    │  │W1 ││W2 ││W3 │   │
-                    │  └─┬─┘└─┬─┘└─┬─┘   │
-                    │    │    │    │      │
-                    │    ▼    ▼    ▼      │
-                    │  ┌───────────────┐  │
-                    │  │ Result Queue  │  │
-                    │  └───────────────┘  │
-                    └─────────────────────┘
+```mermaid
+graph TB
+    subgraph DownloadEngine["Download Engine (asyncio)"]
+        CQ["Chunk Queue<br/>(Pending / Retrying Chunks)"]
+        W1["Worker 1 (HTTP/2 Stream)"]
+        W2["Worker 2 (HTTP/2 Stream)"]
+        W3["Worker N (HTTP/2 Stream)"]
+        RQ["Result Queue<br/>(Success / Failure Events)"]
+    end
+
+    CQ --> W1 & W2 & W3
+    W1 & W2 & W3 --> RQ
 ```
 
 - **Chunk Queue**: Populated with pending/failed chunks; workers consume from it
@@ -198,33 +194,16 @@ Computed:
 
 #### Chunk States
 
-```
-                ┌──────────┐
-                │ PENDING  │ ◄── Initial state
-                └────┬─────┘
-                     │
-                     ▼
-               ┌───────────┐
-               │DOWNLOADING│ ◄── Worker picked up chunk
-               └─────┬─────┘
-                     │
-              ┌──────┴──────┐
-              ▼              ▼
-        ┌──────────┐  ┌──────────┐
-        │ COMPLETE │  │  FAILED  │
-        │(verified)│  │(hash bad │
-        └──────────┘  │ or error)│
-                      └────┬─────┘
-                           │
-                           ▼ (retry ≤ max)
-                      ┌──────────┐
-                      │ PENDING  │ ◄── Re-queued for retry
-                      └──────────┘
-                           │
-                           ▼ (retry > max)
-                      ┌──────────┐
-                      │ABANDONED │ ◄── Max retries exceeded
-                      └──────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING: Initial state
+    PENDING --> DOWNLOADING: Worker assigned chunk
+    DOWNLOADING --> COMPLETE: Verified (Hash matches)
+    DOWNLOADING --> FAILED: Hash mismatch or transport error
+    FAILED --> PENDING: Re-queued (retries <= max_attempts)
+    FAILED --> ABANDONED: Max retries exceeded
+    COMPLETE --> [*]
+    ABANDONED --> [*]
 ```
 
 ---
@@ -244,21 +223,16 @@ Computed:
 
 #### Hash Pipeline
 
-```
-HTTP Response Stream
-        │
-        ├──► hash_context.update(chunk_bytes)   ← streaming hash
-        │
-        └──► disk_write(chunk_bytes)            ← write to temp file
-        
-After all bytes received:
-        │
-        ├──► computed_hash = hash_context.hexdigest()
-        │
-        └──► Compare: computed_hash == expected_hash?
-                │
-                ├── ✅ Match → chunk verified
-                └── ❌ Mismatch → chunk failed
+```mermaid
+graph TD
+    STREAM["HTTP Response Stream"]
+    STREAM --> HASH["hash_context.update(chunk_bytes)<br/>(Streaming SHA-256 + LtHash)"]
+    STREAM --> DISK["disk_write(chunk_bytes)<br/>(Positional pwrite / Temp File)"]
+    
+    HASH --> COMPUTE["computed_hash = hash_context.hexdigest()"]
+    COMPUTE --> COMPARE{"Compare: computed_hash == expected_hash?"}
+    COMPARE -- "Match" --> PASS["Chunk Verified (Pass)"]
+    COMPARE -- "Mismatch" --> FAIL["Chunk Failed (Trigger Localization)"]
 ```
 
 ---
