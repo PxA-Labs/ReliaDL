@@ -11,7 +11,7 @@
 ## Research Paper Reference
 
 > **Paper Title**: ReliaDL: Adaptive Fault-Tolerant Chunked Transfer with Homomorphic Verification and Stochastic Scheduling  
-> **Authors**: Purvansh Joshi, Archit Mittal (PxA Labs) Aviral Mittal
+> **Authors**: Purvansh Joshi, Archit Mittal (PxA Labs), Aviral Mittal
 > **Category**: Networked Systems, Transport Protocols, Distributed Systems Reliability  
 > **Primary Specification**: [docs/NOVEL_ALGORITHMS.md](docs/NOVEL_ALGORITHMS.md)  
 > **Empirical Benchmarks & Methodology**: [docs/PERFORMANCE.md](docs/PERFORMANCE.md)  
