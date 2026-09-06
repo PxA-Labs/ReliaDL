@@ -8,6 +8,27 @@
 
 ---
 
+## Research Paper Reference
+
+> **Paper Title**: ReliaDL: Adaptive Fault-Tolerant Chunked Transfer with Homomorphic Verification and Stochastic Scheduling  
+> **Authors**: Purvansh Joshi, Archit Mittal (PxA Labs)  
+> **Category**: Networked Systems, Transport Protocols, Distributed Systems Reliability  
+> **Primary Specification**: [docs/NOVEL_ALGORITHMS.md](docs/NOVEL_ALGORITHMS.md)  
+> **Empirical Benchmarks & Methodology**: [docs/PERFORMANCE.md](docs/PERFORMANCE.md)  
+
+```bibtex
+@article{reliadl2026,
+  title={{ReliaDL: Adaptive Fault-Tolerant Chunked Transfer with Homomorphic Verification and Stochastic Scheduling}},
+  author={Joshi, Purvansh and Mittal, Archit},
+  journal={arXiv preprint arXiv:2608.xxxxx},
+  year={2026},
+  publisher={PxA Labs},
+  url={https://github.com/PxA-Labs/ReliaDL}
+}
+```
+
+---
+
 ## Overview
 
 **ReliaDL** is a research-oriented, fault-tolerant file transfer framework that formulates the reliable download problem as a constrained stochastic optimization over non-stationary channels. Unlike conventional download managers that employ static chunking and reactive retransmission (ARQ), ReliaDL introduces five novel algorithmic contributions spanning adaptive coding theory, algebraic verification, and optimal resource allocation.
@@ -72,14 +93,133 @@ Achieves asymptotic optimality as N -> infinity (Weber & Weiss, 1990)
 
 ---
 
+## System Architecture & Workflow Diagrams
+
+### Layered System Architecture
+
+```mermaid
+graph TB
+    subgraph ClientLayer["1. Client & Configuration Layer"]
+        CLI["CLI Interface (main.py)"]
+        CONF["Configuration Engine (config.py)"]
+        SM["State Manager (state_manager.py - ACID Persistence)"]
+    end
+
+    subgraph ControlLayer["2. Stochastic Control & Optimization Layer"]
+        AC["AdaChunk Optimizer<br/>(Lyapunov Drift-Plus-Penalty)"]
+        WS["Whittle Scheduler<br/>(Restless Bandit Allocation)"]
+        PE["Predictive Parity Encoder<br/>(Gilbert-Elliott Markov FEC)"]
+    end
+
+    subgraph TransportLayer["3. Concurrent Transport Engine"]
+        DE["Download Engine (download_engine.py)"]
+        W1["Worker 1 (HTTP/2 Range GET)"]
+        W2["Worker 2 (HTTP/2 Range GET)"]
+        WN["Worker K (HTTP/2 Range GET)"]
+    end
+
+    subgraph VerificationLayer["4. Verification & Localization Layer"]
+        DH["Dual Hasher<br/>(Streaming SHA-256 + LtHash)"]
+        ML["Sub-Chunk Merkle Localizer<br/>(4 KB Segment Binary Search)"]
+        HH["Homomorphic Aggregator<br/>(O(1) Whole-File Integrity Gate)"]
+    end
+
+    subgraph StorageLayer["5. Direct Zero-Copy Storage Engine"]
+        FA["Positional Disk Writer (os.pwrite)"]
+        OUT["Target Payload Artifact"]
+    end
+
+    CLI --> CONF
+    CLI --> DE
+    DE <--> SM
+    DE --> AC
+    DE --> WS
+    AC -. "Optimal Chunk Size B_t*" .-> DE
+    WS -. "Top-K Arm Assignments" .-> DE
+    DE --> PE
+    PE -. "Parity Allocation" .-> DE
+    DE --> W1 & W2 & WN
+    W1 & W2 & WN --> DH
+    DH --> ML
+    ML --> HH
+    DH --> FA
+    FA --> OUT
+    HH -. "O(1) Verification Pass" .-> SM
+```
+
+### End-to-End Download & Recovery Sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as User / CLI
+    participant DE as Download Engine
+    participant AC as AdaChunk Optimizer
+    participant WS as Whittle Scheduler
+    participant W as Worker Pool
+    participant PE as Parity Engine
+    participant ML as Merkle Localizer
+    participant HH as LtHash Aggregator
+
+    U->>DE: Initiate Download(URL, Target)
+    DE->>AC: Sample Channel State (RTT, Loss, BDP)
+    AC-->>DE: Return Optimal Chunk Size B_t*
+    DE->>WS: Query Active Arm Rankings
+    WS-->>DE: Allocate Top-K Sources
+    DE->>PE: Compute Parity Redundancy r*(t)
+    PE-->>DE: Attach Proactive FEC Units
+    DE->>W: Dispatch Range GET [Start, End]
+    W-->>DE: Ingest Chunks + Stream Hashes
+    DE->>HH: Accumulate Homomorphic Hash H(chunk)
+    alt Chunk Hash Valid
+        DE->>DE: Commit to Disk via os.pwrite()
+    else Chunk Hash Corrupt
+        DE->>ML: Traverse Hierarchical Merkle Tree
+        ML-->>DE: Pinpoint Corrupted 4 KB Sub-Blocks
+        alt Parity Recoverable
+            DE->>PE: Execute Zero-RTT XOR Reconstruction
+            PE-->>DE: Reconstructed Valid Sub-Blocks
+        else Parity Exhausted
+            DE->>W: Issue Targeted 4 KB Range GET
+            W-->>DE: Recovered Byte Segment
+        end
+    end
+    DE->>HH: Evaluate Sum(H_i) == ExpectedRoot mod p
+    HH-->>U: Instantaneous O(1) Verification Complete
+```
+
+### Chunk Lifecycle State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING: Range Partitioned
+    PENDING --> SCHEDULED: Whittle Index Priority
+    SCHEDULED --> DOWNLOADING: Worker Assigned
+    DOWNLOADING --> STREAM_VERIFYING: Buffer Ingestion Complete
+    
+    STREAM_VERIFYING --> HOMOMORPHIC_ACCUMULATED: SHA-256 & LtHash Pass
+    HOMOMORPHIC_ACCUMULATED --> COMMITTED: Written via os.pwrite()
+    COMMITTED --> [*]
+    
+    STREAM_VERIFYING --> MERKLE_LOCALIZING: Checksum Mismatch Detected
+    MERKLE_LOCALIZING --> PARITY_RECOVERY: 4 KB Corrupted Segments Identified
+    
+    PARITY_RECOVERY --> HOMOMORPHIC_ACCUMULATED: Zero-RTT XOR Recovery Pass
+    PARITY_RECOVERY --> TARGETED_RETRY: FEC Overhead Insufficient
+    TARGETED_RETRY --> DOWNLOADING: Re-request 4 KB Sub-Range
+```
+
+---
+
 ## Repository Structure
 
 ```
-ChunkGuard/
+ReliaDL/
 ├── README.md                          # Project documentation entry point
 ├── LICENSE                            # Apache 2.0 License
 │
 ├── docs/
+│   ├── NOVEL_ALGORITHMS.md            # Formal mathematical formulations & proofs
 │   ├── PROJECT_OVERVIEW.md            # High-level system overview
 │   ├── ARCHITECTURE.md                # Component design & architectural decisions
 │   ├── TECHNICAL_SPECIFICATION.md     # Detailed protocols, data schemas, & algorithms
@@ -160,6 +300,7 @@ python -m src.main verify \
 
 | Document | Audience | Description |
 |---|---|---|
+| [Novel Algorithms](docs/NOVEL_ALGORITHMS.md) | Systems Researchers & Algorithm Engineers | Mathematical formulations, Lyapunov optimization, LtHash, & proofs |
 | [Project Overview](docs/PROJECT_OVERVIEW.md) | Technical & Non-Technical | Business context, problem statement, and scope |
 | [Architecture](docs/ARCHITECTURE.md) | System Architects & Engineers | Structural design, component responsibilities, and trade-offs |
 | [Technical Specification](docs/TECHNICAL_SPECIFICATION.md) | Software Engineers | In-depth protocols, schemas, and mathematical specifications |
@@ -183,7 +324,7 @@ python -m src.main verify \
 
 ## Security & OpenSSF Compliance
 
-ChunkGuard adheres to the [Open Source Security Foundation (OpenSSF)](https://openssf.org/) Best Practices and Scorecard standards:
+ReliaDL adheres to the [Open Source Security Foundation (OpenSSF)](https://openssf.org/) Best Practices and Scorecard standards:
 
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/PxA-Labs/ReliaDL/badge)](https://securityscorecards.dev/viewer/?url=github.com/PxA-Labs/ReliaDL)
 
