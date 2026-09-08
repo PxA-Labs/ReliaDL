@@ -56,7 +56,10 @@ from src.models import (
     DownloadStatistics,
     DownloadStatus,
     ProgressReport,
-    VerificationResult,
+)
+from src.sparse_writer import (
+    AllocationStrategy,
+    SparseFileWriter,
 )
 
 __all__ = [
@@ -110,4 +113,7 @@ __all__ = [
     "apply_env_overrides",
     "load_config",
     "get_download_config",
+    # Sparse Writer
+    "SparseFileWriter",
+    "AllocationStrategy",
 ]
