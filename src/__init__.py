@@ -5,6 +5,15 @@ Fault-tolerant, high-throughput chunked download engine.
 
 from __future__ import annotations
 
+from src.config import (
+    apply_env_overrides,
+    deep_merge,
+    format_size,
+    get_download_config,
+    load_config,
+    load_yaml_file,
+    parse_size,
+)
 from src.exceptions import (
     AllocationError,
     AssemblyError,
@@ -93,4 +102,12 @@ __all__ = [
     "StateCorruptedError",
     "AssemblyError",
     "AssemblyFailedError",
+    # Config
+    "parse_size",
+    "format_size",
+    "load_yaml_file",
+    "deep_merge",
+    "apply_env_overrides",
+    "load_config",
+    "get_download_config",
 ]
