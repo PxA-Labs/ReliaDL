@@ -58,6 +58,11 @@ from src.models import (
     ProgressReport,
     VerificationResult,
 )
+from src.state_manager import (
+    CHUNK_FILE_PERMISSIONS,
+    STATE_FILE_PERMISSIONS,
+    StateManager,
+)
 
 __all__ = [
     # Enums & Models
@@ -110,4 +115,8 @@ __all__ = [
     "apply_env_overrides",
     "load_config",
     "get_download_config",
+    # State Manager
+    "StateManager",
+    "STATE_FILE_PERMISSIONS",
+    "CHUNK_FILE_PERMISSIONS",
 ]
