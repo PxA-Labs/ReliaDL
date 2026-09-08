@@ -9,6 +9,8 @@ and ChunkSpec conversions.
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import json
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -21,9 +23,11 @@ from jsonschema.validators import Draft202012Validator
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.exceptions import (
+    ChunkHashMismatchError,
     ManifestError,
     ManifestFormatError,
     ManifestSignatureMismatchError,
+    SubBlockCorruptedError,
 )
 from src.models import ChunkSpec
 
@@ -331,6 +335,26 @@ class ChunkManifest(BaseModel):
             trusted_public_key=trusted_public_key,
             manifest_path=manifest_path,
         )
+
+    def compute_merkle_root(self) -> str:
+        """Compute the domain-separated binary Merkle root over chunk hashes."""
+        chunk_hashes = [c.sha256 for c in self.chunks]
+        return compute_merkle_root(chunk_hashes)
+
+    def verify_merkle_root(self) -> bool:
+        """
+        Verify that the manifest's declared chunking_topology.merkle_tree_root
+        matches the computed Merkle root of its chunks.
+        """
+        declared_root = self.chunking_topology.merkle_tree_root
+        if not declared_root:
+            raise ManifestError("Manifest has no declared merkle_tree_root in chunking_topology")
+        computed_root = self.compute_merkle_root()
+        if not hmac.compare_digest(declared_root.lower(), computed_root.lower()):
+            raise ManifestError(
+                f"Merkle root mismatch: declared '{declared_root}', computed '{computed_root}'"
+            )
+        return True
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -782,3 +806,356 @@ def dump_manifest(
             f"Failed to write manifest file {path_obj}: {err}",
             manifest_path=str(path_obj),
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Binary Merkle Tree Engine
+# ─────────────────────────────────────────────────────────────────────────────
+
+DEFAULT_SUB_BLOCK_SIZE = 64 * 1024  # 64 KB
+
+
+def hash_leaf(data: Union[str, bytes]) -> bytes:
+    """
+    Hash a chunk digest into a Merkle leaf node with domain separation (0x00 prefix).
+
+    Args:
+        data: Chunk SHA-256 hex string or 32 raw digest bytes.
+
+    Returns:
+        32-byte leaf digest.
+    """
+    if isinstance(data, str):
+        cleaned = data.strip().lower()
+        raw = bytes.fromhex(cleaned) if len(cleaned) == 64 else cleaned.encode("utf-8")
+    else:
+        raw = data
+    return hashlib.sha256(b"\x00" + raw).digest()
+
+
+def hash_parent(left: bytes, right: bytes) -> bytes:
+    """
+    Hash two child Merkle nodes into a parent node with domain separation (0x01 prefix).
+
+    Args:
+        left: 32-byte left child digest.
+        right: 32-byte right child digest.
+
+    Returns:
+        32-byte parent digest.
+    """
+    return hashlib.sha256(b"\x01" + left + right).digest()
+
+
+def compute_merkle_root(chunk_hashes: list[Union[str, bytes]]) -> str:
+    """
+    Compute binary Merkle tree root hash from a sequence of chunk hashes.
+
+    Odd-numbered nodes at any level are duplicated to form a balanced pair, per spec:
+    Parent = SHA-256(0x01 || L || L)
+
+    Args:
+        chunk_hashes: List of chunk SHA-256 hex strings or 32-byte digests.
+
+    Returns:
+        Lower-case hex string of the Merkle root hash (or empty string if no chunks).
+    """
+    if not chunk_hashes:
+        return ""
+    tree = BinaryMerkleTree(chunk_hashes)
+    return tree.root
+
+
+class BinaryMerkleTree:
+    """
+    Domain-separated binary Merkle tree for pre-authenticated chunk verification.
+
+    Leaf nodes:   H(0x00 || chunk_sha256)
+    Parent nodes: H(0x01 || left || right)
+    Odd balance:  H(0x01 || left || left)
+    """
+
+    def __init__(self, chunk_hashes: list[Union[str, bytes]]) -> None:
+        if not chunk_hashes:
+            raise ValueError("Cannot construct Merkle tree with zero chunk hashes")
+
+        self._raw_chunk_hashes: list[Union[str, bytes]] = list(chunk_hashes)
+        self._leaf_nodes: list[bytes] = [hash_leaf(h) for h in chunk_hashes]
+        self._levels: list[list[bytes]] = [self._leaf_nodes]
+
+        current = self._leaf_nodes
+        while len(current) > 1:
+            next_level: list[bytes] = []
+            for i in range(0, len(current), 2):
+                left = current[i]
+                right = current[i + 1] if i + 1 < len(current) else left
+                next_level.append(hash_parent(left, right))
+            self._levels.append(next_level)
+            current = next_level
+
+        self._root = current[0].hex()
+
+    @property
+    def root(self) -> str:
+        """Hex string of the Merkle root hash."""
+        return self._root
+
+    @property
+    def levels(self) -> list[list[bytes]]:
+        """All levels of the tree from leaves (level 0) to root."""
+        return self._levels
+
+    @property
+    def leaf_nodes(self) -> list[bytes]:
+        """Leaf digests of the tree."""
+        return self._leaf_nodes
+
+    def get_proof(self, leaf_index: int) -> list[tuple[str, str]]:
+        """
+        Generate Merkle audit path (inclusion proof) for leaf_index.
+
+        Returns:
+            List of (sibling_hex_hash, direction) where direction is 'left' or 'right'.
+        """
+        if leaf_index < 0 or leaf_index >= len(self._leaf_nodes):
+            raise IndexError(f"Leaf index {leaf_index} out of bounds (0..{len(self._leaf_nodes) - 1})")
+
+        proof: list[tuple[str, str]] = []
+        idx = leaf_index
+
+        for level in self._levels[:-1]:
+            if idx % 2 == 0:
+                # Sibling is on the right
+                sib_idx = idx + 1 if idx + 1 < len(level) else idx
+                proof.append((level[sib_idx].hex(), "right"))
+            else:
+                # Sibling is on the left
+                sib_idx = idx - 1
+                proof.append((level[sib_idx].hex(), "left"))
+            idx //= 2
+
+        return proof
+
+    @staticmethod
+    def verify_inclusion(
+        chunk_hash: Union[str, bytes],
+        proof: list[tuple[str, str]],
+        expected_root: str,
+    ) -> bool:
+        """
+        Verify a Merkle inclusion proof for a chunk against the declared root hash.
+
+        Args:
+            chunk_hash: Target chunk SHA-256 hex or raw digest.
+            proof: List of (sibling_hex, 'left'|'right') steps.
+            expected_root: Expected Merkle tree root hex string.
+
+        Returns:
+            True if audit path matches expected_root, False otherwise.
+        """
+        current = hash_leaf(chunk_hash)
+
+        for sibling_hex, direction in proof:
+            sib_bytes = bytes.fromhex(sibling_hex)
+            if direction == "left":
+                current = hash_parent(sib_bytes, current)
+            else:
+                current = hash_parent(current, sib_bytes)
+
+        return hmac.compare_digest(current.hex().lower(), expected_root.strip().lower())
+
+    @classmethod
+    def from_manifest(cls, manifest: ChunkManifest) -> BinaryMerkleTree:
+        """Construct BinaryMerkleTree directly from ChunkManifest chunks."""
+        hashes = [c.sha256 for c in manifest.chunks]
+        return cls(hashes)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SBM-IA Streaming 64 KB Sub-Block Verification
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def calculate_sub_blocks(
+    data: bytes,
+    sub_block_size: int = DEFAULT_SUB_BLOCK_SIZE,
+) -> list[str]:
+    """
+    Split binary data into sub-blocks (default 64 KB) and compute SHA-256 of each.
+
+    Args:
+        data: Binary payload.
+        sub_block_size: Sub-block byte size (default 65536).
+
+    Returns:
+        List of lowercase SHA-256 hex strings.
+    """
+    if not data:
+        return []
+    sub_blocks: list[str] = []
+    for offset in range(0, len(data), sub_block_size):
+        chunk = data[offset : offset + sub_block_size]
+        sub_blocks.append(hashlib.sha256(chunk).hexdigest())
+    return sub_blocks
+
+
+class SubBlockStreamValidator:
+    """
+    SBM-IA: Streaming Sub-Block Merkle Immediate Abort Validator.
+
+    Validates incoming streaming byte chunks against expected 64 KB sub-block SHA-256 hashes
+    in real time. If any sub-block fails verification, it immediately raises
+    SubBlockCorruptedError to abort the stream instantly without downloading the remaining
+    chunk bytes.
+    """
+
+    def __init__(
+        self,
+        chunk_index: int,
+        expected_sub_blocks: list[str],
+        sub_block_size: int = DEFAULT_SUB_BLOCK_SIZE,
+        expected_chunk_hash: Optional[str] = None,
+    ) -> None:
+        self._chunk_index = chunk_index
+        self._expected_sub_blocks = [s.strip().lower() for s in expected_sub_blocks]
+        self._sub_block_size = sub_block_size
+        self._expected_chunk_hash = expected_chunk_hash.strip().lower() if expected_chunk_hash else None
+
+        self._buffer = bytearray()
+        self._current_sub_block_idx = 0
+        self._total_bytes_processed = 0
+        self._verified_sub_blocks = 0
+        self._chunk_hasher = hashlib.sha256()
+        self._is_finalized = False
+
+    @property
+    def chunk_index(self) -> int:
+        """Chunk index this validator belongs to."""
+        return self._chunk_index
+
+    @property
+    def verified_sub_blocks(self) -> int:
+        """Count of verified sub-blocks so far."""
+        return self._verified_sub_blocks
+
+    @property
+    def total_bytes_processed(self) -> int:
+        """Total raw bytes fed into the validator."""
+        return self._total_bytes_processed
+
+    @property
+    def is_finalized(self) -> bool:
+        """Whether the stream has completed finalization."""
+        return self._is_finalized
+
+    def update(self, data: bytes) -> int:
+        """
+        Feed streaming byte chunks into the validator.
+
+        Whenever buffer reaches sub_block_size, validates the sub-block immediately.
+        Raises SubBlockCorruptedError immediately on mismatch.
+
+        Returns:
+            Number of sub-blocks verified in this update call.
+        """
+        if self._is_finalized:
+            raise ValueError("Cannot update finalized SubBlockStreamValidator")
+
+        if not data:
+            return 0
+
+        self._buffer.extend(data)
+        self._chunk_hasher.update(data)
+        self._total_bytes_processed += len(data)
+
+        verified_in_call = 0
+        while len(self._buffer) >= self._sub_block_size:
+            if self._current_sub_block_idx >= len(self._expected_sub_blocks):
+                raise SubBlockCorruptedError(
+                    f"Received unexpected extra sub-block #{self._current_sub_block_idx} "
+                    f"for chunk {self._chunk_index}",
+                    sub_block_index=self._current_sub_block_idx,
+                    chunk_index=self._chunk_index,
+                )
+
+            block = bytes(self._buffer[: self._sub_block_size])
+            del self._buffer[: self._sub_block_size]
+
+            computed = hashlib.sha256(block).hexdigest()
+            expected = self._expected_sub_blocks[self._current_sub_block_idx]
+
+            if not hmac.compare_digest(computed, expected):
+                raise SubBlockCorruptedError(
+                    f"SBM-IA verification failed on sub-block #{self._current_sub_block_idx} "
+                    f"of chunk {self._chunk_index}: expected {expected}, computed {computed}",
+                    sub_block_index=self._current_sub_block_idx,
+                    expected_hash=expected,
+                    computed_hash=computed,
+                    chunk_index=self._chunk_index,
+                    offset=self._current_sub_block_idx * self._sub_block_size,
+                )
+
+            self._current_sub_block_idx += 1
+            self._verified_sub_blocks += 1
+            verified_in_call += 1
+
+        return verified_in_call
+
+    def finalize(self) -> bool:
+        """
+        Finalize stream validation, verifying any remaining partial trailing sub-block
+        and the entire chunk SHA-256 hash if expected_chunk_hash was provided.
+
+        Returns:
+            True if all sub-blocks and chunk hash match.
+
+        Raises:
+            SubBlockCorruptedError: If trailing sub-block hash mismatches.
+            ChunkHashMismatchError: If whole chunk hash mismatches.
+        """
+        if self._is_finalized:
+            return True
+
+        # Process trailing partial sub-block if present
+        if len(self._buffer) > 0:
+            if self._current_sub_block_idx >= len(self._expected_sub_blocks):
+                raise SubBlockCorruptedError(
+                    f"Trailing bytes exceed expected sub-blocks count in chunk {self._chunk_index}",
+                    sub_block_index=self._current_sub_block_idx,
+                    chunk_index=self._chunk_index,
+                )
+
+            block = bytes(self._buffer)
+            self._buffer.clear()
+
+            computed = hashlib.sha256(block).hexdigest()
+            expected = self._expected_sub_blocks[self._current_sub_block_idx]
+
+            if not hmac.compare_digest(computed, expected):
+                raise SubBlockCorruptedError(
+                    f"SBM-IA verification failed on trailing sub-block #{self._current_sub_block_idx} "
+                    f"of chunk {self._chunk_index}: expected {expected}, computed {computed}",
+                    sub_block_index=self._current_sub_block_idx,
+                    expected_hash=expected,
+                    computed_hash=computed,
+                    chunk_index=self._chunk_index,
+                    offset=self._current_sub_block_idx * self._sub_block_size,
+                )
+
+            self._current_sub_block_idx += 1
+            self._verified_sub_blocks += 1
+
+        # Check whole chunk hash if configured
+        if self._expected_chunk_hash:
+            computed_chunk = self._chunk_hasher.hexdigest()
+            if not hmac.compare_digest(computed_chunk, self._expected_chunk_hash):
+                raise ChunkHashMismatchError(
+                    f"Chunk {self._chunk_index} final hash mismatch: "
+                    f"expected {self._expected_chunk_hash}, computed {computed_chunk}",
+                    chunk_index=self._chunk_index,
+                    expected_hash=self._expected_chunk_hash,
+                    computed_hash=computed_chunk,
+                )
+
+        self._is_finalized = True
+        return True

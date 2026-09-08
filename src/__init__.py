@@ -43,6 +43,7 @@ from src.exceptions import (
     StateNotFoundError,
     StorageError,
     StoragePermissionError,
+    SubBlockCorruptedError,
     TimeoutError,
 )
 from src.models import (
@@ -76,6 +77,13 @@ from src.manifest import (
     generate_rsa_keypair,
     sign_manifest,
     verify_manifest_signature,
+    DEFAULT_SUB_BLOCK_SIZE,
+    BinaryMerkleTree,
+    SubBlockStreamValidator,
+    calculate_sub_blocks,
+    compute_merkle_root,
+    hash_leaf,
+    hash_parent,
 )
 
 __all__ = [
@@ -110,6 +118,7 @@ __all__ = [
     "ManifestFormatError",
     "IntegrityError",
     "ChunkHashMismatchError",
+    "SubBlockCorruptedError",
     "FileHashMismatchError",
     "StorageError",
     "DiskFullError",
@@ -147,4 +156,11 @@ __all__ = [
     "generate_rsa_keypair",
     "sign_manifest",
     "verify_manifest_signature",
+    "DEFAULT_SUB_BLOCK_SIZE",
+    "BinaryMerkleTree",
+    "SubBlockStreamValidator",
+    "calculate_sub_blocks",
+    "compute_merkle_root",
+    "hash_leaf",
+    "hash_parent",
 ]
