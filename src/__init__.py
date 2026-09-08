@@ -58,6 +58,20 @@ from src.models import (
     ProgressReport,
     VerificationResult,
 )
+from src.manifest import (
+    MANIFEST_JSON_SCHEMA,
+    ArtifactMetadata,
+    ChunkingTopology,
+    ChunkManifest,
+    ManifestChunk,
+    ManifestGenerator,
+    ManifestSignature,
+    MirrorSpec,
+    dump_manifest,
+    load_manifest,
+    parse_manifest_json,
+    validate_manifest_dict,
+)
 
 __all__ = [
     # Enums & Models
@@ -110,4 +124,17 @@ __all__ = [
     "apply_env_overrides",
     "load_config",
     "get_download_config",
+    # Manifest
+    "MANIFEST_JSON_SCHEMA",
+    "ManifestGenerator",
+    "ArtifactMetadata",
+    "MirrorSpec",
+    "ChunkingTopology",
+    "ManifestChunk",
+    "ManifestSignature",
+    "ChunkManifest",
+    "validate_manifest_dict",
+    "parse_manifest_json",
+    "load_manifest",
+    "dump_manifest",
 ]
