@@ -13,7 +13,11 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+try:
+    from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+    _HAS_PYDANTIC = True
+except ImportError:
+    _HAS_PYDANTIC = False
 
 
 class ChunkStatus(str, Enum):
@@ -444,177 +448,268 @@ class ProgressReport:
         return data
 
 
-class DownloadConfig(BaseModel):
-    """
-    Pydantic model providing validation and typing for download engine configurations.
-    """
+if _HAS_PYDANTIC:
+    class DownloadConfig(BaseModel):
+        """
+        Pydantic model providing validation and typing for download engine configurations.
+        """
 
-    model_config = ConfigDict(extra="ignore", validate_assignment=True)
+        model_config = ConfigDict(extra="ignore", validate_assignment=True)
 
-    # Chunking
-    chunk_size_bytes: int = Field(
-        default=8_388_608,
-        description="Size of each chunk in bytes (1MB to 256MB)",
-    )
+        # Chunking
+        chunk_size_bytes: int = Field(
+            default=8_388_608,
+            description="Size of each chunk in bytes (1MB to 256MB)",
+        )
 
-    # Parallelism
-    max_parallel_workers: int = Field(
-        default=4,
-        ge=1,
-        le=32,
-        description="Maximum concurrent chunk downloads",
-    )
+        # Parallelism
+        max_parallel_workers: int = Field(
+            default=4,
+            ge=1,
+            le=32,
+            description="Maximum concurrent chunk downloads",
+        )
 
-    # Retry Policies
-    max_retries_per_chunk: int = Field(
-        default=3,
-        ge=0,
-        le=100,
-        description="Maximum retry attempts per chunk",
-    )
-    retry_base_delay_seconds: float = Field(
-        default=1.0,
-        ge=0.0,
-        description="Base delay before first retry in seconds",
-    )
-    retry_max_delay_seconds: float = Field(
-        default=60.0,
-        ge=0.0,
-        description="Maximum delay between retries in seconds",
-    )
-    retry_backoff_factor: float = Field(
-        default=2.0,
-        ge=1.0,
-        description="Exponential multiplier applied to retry delay",
-    )
-    retry_jitter_factor: float = Field(
-        default=0.5,
-        ge=0.0,
-        le=1.0,
-        description="Random jitter factor added to retry delay",
-    )
+        # Retry Policies
+        max_retries_per_chunk: int = Field(
+            default=3,
+            ge=0,
+            le=100,
+            description="Maximum retry attempts per chunk",
+        )
+        retry_base_delay_seconds: float = Field(
+            default=1.0,
+            ge=0.0,
+            description="Base delay before first retry in seconds",
+        )
+        retry_max_delay_seconds: float = Field(
+            default=60.0,
+            ge=0.0,
+            description="Maximum delay between retries in seconds",
+        )
+        retry_backoff_factor: float = Field(
+            default=2.0,
+            ge=1.0,
+            description="Exponential multiplier applied to retry delay",
+        )
+        retry_jitter_factor: float = Field(
+            default=0.5,
+            ge=0.0,
+            le=1.0,
+            description="Random jitter factor added to retry delay",
+        )
 
-    # Timeouts
-    connect_timeout_seconds: float = Field(
-        default=30.0,
-        gt=0.0,
-        description="TCP connection timeout in seconds",
-    )
-    read_timeout_seconds: float = Field(
-        default=300.0,
-        gt=0.0,
-        description="Read timeout for chunk transfer in seconds",
-    )
+        # Timeouts
+        connect_timeout_seconds: float = Field(
+            default=30.0,
+            gt=0.0,
+            description="TCP connection timeout in seconds",
+        )
+        read_timeout_seconds: float = Field(
+            default=300.0,
+            gt=0.0,
+            description="Read timeout for chunk transfer in seconds",
+        )
 
-    # Hashing & Storage
-    hash_algorithm: str = Field(
-        default="sha256",
-        description="Cryptographic hash algorithm for chunk/file verification",
-    )
-    state_directory: str = Field(
-        default=".ReliaDL",
-        description="Directory name for state and chunk files",
-    )
-    verify_on_complete: bool = Field(
-        default=True,
-        description="Perform whole-file hash verification after assembly",
-    )
-    cleanup_chunks_on_complete: bool = Field(
-        default=True,
-        description="Delete chunk files after successful assembly",
-    )
-    pre_check_disk_space: bool = Field(
-        default=True,
-        description="Verify sufficient disk space prior to downloading",
-    )
-    direct_write: bool = Field(
-        default=False,
-        description="Direct sparse file allocation bypassing staged chunk storage",
-    )
+        # Hashing & Storage
+        hash_algorithm: str = Field(
+            default="sha256",
+            description="Cryptographic hash algorithm for chunk/file verification",
+        )
+        state_directory: str = Field(
+            default=".ReliaDL",
+            description="Directory name for state and chunk files",
+        )
+        verify_on_complete: bool = Field(
+            default=True,
+            description="Perform whole-file hash verification after assembly",
+        )
+        cleanup_chunks_on_complete: bool = Field(
+            default=True,
+            description="Delete chunk files after successful assembly",
+        )
+        pre_check_disk_space: bool = Field(
+            default=True,
+            description="Verify sufficient disk space prior to downloading",
+        )
+        direct_write: bool = Field(
+            default=False,
+            description="Direct sparse file allocation bypassing staged chunk storage",
+        )
 
-    # Progress & Metrics
-    progress_update_interval_seconds: float = Field(
-        default=0.5,
-        gt=0.0,
-        description="Minimum interval between progress updates in seconds",
-    )
+        # Progress & Metrics
+        progress_update_interval_seconds: float = Field(
+            default=0.5,
+            gt=0.0,
+            description="Minimum interval between progress updates in seconds",
+        )
 
-    # Network & Transport
-    user_agent: str = Field(
-        default="ReliaDL/1.0",
-        description="HTTP User-Agent header value",
-    )
-    max_bandwidth_bytes_per_sec: int = Field(
-        default=0,
-        ge=0,
-        description="Maximum download bandwidth in bytes/sec (0 = unlimited)",
-    )
-    http2: bool = Field(
-        default=True,
-        description="Enable HTTP/2 protocol",
-    )
-    verify_ssl: bool = Field(
-        default=True,
-        description="Verify TLS/SSL certificates",
-    )
-    max_redirects: int = Field(
-        default=5,
-        ge=0,
-        le=50,
-        description="Maximum HTTP redirects to follow",
-    )
-    proxy_url: Optional[str] = Field(
-        default=None,
-        description="HTTP/HTTPS/SOCKS5 proxy URL",
-    )
-    manifest_path: Optional[str] = Field(
-        default=None,
-        description="Path to .cgmanifest file",
-    )
+        # Network & Transport
+        user_agent: str = Field(
+            default="ReliaDL/1.0",
+            description="HTTP User-Agent header value",
+        )
+        max_bandwidth_bytes_per_sec: int = Field(
+            default=0,
+            ge=0,
+            description="Maximum download bandwidth in bytes/sec (0 = unlimited)",
+        )
+        http2: bool = Field(
+            default=True,
+            description="Enable HTTP/2 protocol",
+        )
+        verify_ssl: bool = Field(
+            default=True,
+            description="Verify TLS/SSL certificates",
+        )
+        max_redirects: int = Field(
+            default=5,
+            ge=0,
+            le=50,
+            description="Maximum HTTP redirects to follow",
+        )
+        proxy_url: Optional[str] = Field(
+            default=None,
+            description="HTTP/HTTPS/SOCKS5 proxy URL",
+        )
+        manifest_path: Optional[str] = Field(
+            default=None,
+            description="Path to .cgmanifest file",
+        )
 
-    @field_validator("chunk_size_bytes")
-    @classmethod
-    def validate_chunk_size(cls, v: int) -> int:
-        min_size = 1024 * 1024  # 1 MB
-        max_size = 256 * 1024 * 1024  # 256 MB
-        if v < min_size or v > max_size:
-            raise ValueError(
-                f"chunk_size_bytes must be between {min_size} (1MB) and {max_size} (256MB), got {v}"
-            )
-        return v
+        @field_validator("chunk_size_bytes")
+        @classmethod
+        def validate_chunk_size(cls, v: int) -> int:
+            min_size = 1024 * 1024  # 1 MB
+            max_size = 256 * 1024 * 1024  # 256 MB
+            if v < min_size or v > max_size:
+                raise ValueError(
+                    f"chunk_size_bytes must be between {min_size} (1MB) and {max_size} (256MB), got {v}"
+                )
+            return v
 
-    @field_validator("hash_algorithm")
-    @classmethod
-    def validate_hash_algorithm(cls, v: str) -> str:
-        v_clean = v.strip().lower()
-        if v_clean in ("md5", "sha1"):
-            raise ValueError(
-                f"Weak hash algorithm '{v}' is disallowed by security policy. Use sha256 or sha512."
-            )
-        if v_clean not in ("sha256", "sha384", "sha512"):
-            raise ValueError(
-                f"Unsupported hash algorithm '{v}'. Supported algorithms: sha256, sha384, sha512."
-            )
-        return v_clean
+        @field_validator("hash_algorithm")
+        @classmethod
+        def validate_hash_algorithm(cls, v: str) -> str:
+            v_clean = v.strip().lower()
+            if v_clean in ("md5", "sha1"):
+                raise ValueError(
+                    f"Weak hash algorithm '{v}' is disallowed by security policy. Use sha256 or sha512."
+                )
+            if v_clean not in ("sha256", "sha384", "sha512"):
+                raise ValueError(
+                    f"Unsupported hash algorithm '{v}'. Supported algorithms: sha256, sha384, sha512."
+                )
+            return v_clean
 
-    @model_validator(mode="after")
-    def validate_retry_ranges(self) -> DownloadConfig:
-        if self.retry_max_delay_seconds < self.retry_base_delay_seconds:
-            raise ValueError(
-                f"retry_max_delay_seconds ({self.retry_max_delay_seconds}) cannot be less than "
-                f"retry_base_delay_seconds ({self.retry_base_delay_seconds})"
-            )
-        return self
+        @model_validator(mode="after")
+        def validate_retry_ranges(self) -> DownloadConfig:
+            if self.retry_max_delay_seconds < self.retry_base_delay_seconds:
+                raise ValueError(
+                    f"retry_max_delay_seconds ({self.retry_max_delay_seconds}) cannot be less than "
+                    f"retry_base_delay_seconds ({self.retry_base_delay_seconds})"
+                )
+            return self
 
-    def validate(self) -> None:
-        """Validate configuration values. Raises ValueError on invalid values."""
-        self.model_validate(self.model_dump())
+        def validate(self) -> None:
+            """Validate configuration values. Raises ValueError on invalid values."""
+            self.model_validate(self.model_dump())
 
-    def to_dict(self) -> dict[str, Any]:
-        """Convert configuration to dictionary."""
-        return self.model_dump()
+        def to_dict(self) -> dict[str, Any]:
+            """Convert configuration to dictionary."""
+            return self.model_dump()
 
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> DownloadConfig:
-        """Instantiate configuration from dictionary."""
-        return cls.model_validate(data)
+        @classmethod
+        def from_dict(cls, data: dict[str, Any]) -> DownloadConfig:
+            """Instantiate configuration from dictionary."""
+            return cls.model_validate(data)
+
+else:
+    @dataclass
+    class DownloadConfig:
+        """
+        Configuration dataclass providing typing and boundary validation.
+        Fallback implementation for environments where pydantic is not installed.
+        """
+
+        chunk_size_bytes: int = 8_388_608
+        max_parallel_workers: int = 4
+        max_retries_per_chunk: int = 3
+        retry_base_delay_seconds: float = 1.0
+        retry_max_delay_seconds: float = 60.0
+        retry_backoff_factor: float = 2.0
+        retry_jitter_factor: float = 0.5
+        connect_timeout_seconds: float = 30.0
+        read_timeout_seconds: float = 300.0
+        hash_algorithm: str = "sha256"
+        state_directory: str = ".ReliaDL"
+        verify_on_complete: bool = True
+        cleanup_chunks_on_complete: bool = True
+        pre_check_disk_space: bool = True
+        direct_write: bool = False
+        progress_update_interval_seconds: float = 0.5
+        user_agent: str = "ReliaDL/1.0"
+        max_bandwidth_bytes_per_sec: int = 0
+        http2: bool = True
+        verify_ssl: bool = True
+        max_redirects: int = 5
+        proxy_url: Optional[str] = None
+        manifest_path: Optional[str] = None
+
+        def __post_init__(self) -> None:
+            self.validate()
+
+        def validate(self) -> None:
+            """Validate configuration parameters against system limits."""
+            min_size = 1024 * 1024
+            max_size = 256 * 1024 * 1024
+            if self.chunk_size_bytes < min_size or self.chunk_size_bytes > max_size:
+                raise ValueError(
+                    f"chunk_size_bytes must be between {min_size} (1MB) and {max_size} (256MB), got {self.chunk_size_bytes}"
+                )
+            if not (1 <= self.max_parallel_workers <= 32):
+                raise ValueError(
+                    f"max_parallel_workers must be between 1 and 32, got {self.max_parallel_workers}"
+                )
+            if not (0 <= self.max_retries_per_chunk <= 100):
+                raise ValueError("max_retries_per_chunk must be between 0 and 100")
+            if self.retry_base_delay_seconds < 0:
+                raise ValueError("retry_base_delay_seconds must be >= 0")
+            if self.retry_max_delay_seconds < self.retry_base_delay_seconds:
+                raise ValueError(
+                    f"retry_max_delay_seconds ({self.retry_max_delay_seconds}) cannot be less than "
+                    f"retry_base_delay_seconds ({self.retry_base_delay_seconds})"
+                )
+            if self.retry_backoff_factor < 1.0:
+                raise ValueError("retry_backoff_factor must be >= 1.0")
+            if not (0.0 <= self.retry_jitter_factor <= 1.0):
+                raise ValueError("retry_jitter_factor must be between 0.0 and 1.0")
+            if self.connect_timeout_seconds <= 0:
+                raise ValueError("connect_timeout_seconds must be > 0")
+            if self.read_timeout_seconds <= 0:
+                raise ValueError("read_timeout_seconds must be > 0")
+            if self.progress_update_interval_seconds <= 0:
+                raise ValueError("progress_update_interval_seconds must be > 0")
+            if self.max_bandwidth_bytes_per_sec < 0:
+                raise ValueError("max_bandwidth_bytes_per_sec must be >= 0")
+            if not (0 <= self.max_redirects <= 50):
+                raise ValueError("max_redirects must be between 0 and 50")
+
+            clean_hash = self.hash_algorithm.strip().lower()
+            if clean_hash in ("md5", "sha1"):
+                raise ValueError(
+                    f"Weak hash algorithm '{self.hash_algorithm}' is disallowed by security policy. Use sha256 or sha512."
+                )
+            if clean_hash not in ("sha256", "sha384", "sha512"):
+                raise ValueError(
+                    f"Unsupported hash algorithm '{self.hash_algorithm}'. Supported algorithms: sha256, sha384, sha512."
+                )
+
+        def to_dict(self) -> dict[str, Any]:
+            """Convert configuration to dictionary."""
+            return asdict(self)
+
+        @classmethod
+        def from_dict(cls, data: dict[str, Any]) -> DownloadConfig:
+            """Instantiate configuration from dictionary."""
+            return cls(**data)

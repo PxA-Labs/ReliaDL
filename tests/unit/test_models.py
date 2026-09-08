@@ -11,8 +11,6 @@ from dataclasses import FrozenInstanceError
 from datetime import datetime, timezone
 from pathlib import Path
 
-from pydantic import ValidationError
-
 from src.models import (
     ChunkResult,
     ChunkSpec,
@@ -26,6 +24,12 @@ from src.models import (
     ProgressReport,
     VerificationResult,
 )
+
+try:
+    from pydantic import ValidationError
+    ValidationException = (ValueError, ValidationError)
+except ImportError:
+    ValidationException = ValueError  # type: ignore[assignment,misc]
 
 
 class TestChunkStatus(unittest.TestCase):
@@ -415,7 +419,7 @@ class TestResultAndReportModels(unittest.TestCase):
 
 
 class TestDownloadConfig(unittest.TestCase):
-    """Tests for DownloadConfig Pydantic validation."""
+    """Tests for DownloadConfig validation."""
 
     def test_default_config_validity(self) -> None:
         config = DownloadConfig()
@@ -444,28 +448,28 @@ class TestDownloadConfig(unittest.TestCase):
 
     def test_chunk_size_bounds_validation(self) -> None:
         # Below minimum (< 1 MB)
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(ValidationException):
             DownloadConfig(chunk_size_bytes=512 * 1024)
 
         # Above maximum (> 256 MB)
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(ValidationException):
             DownloadConfig(chunk_size_bytes=512 * 1024 * 1024)
 
     def test_worker_bounds_validation(self) -> None:
         # Less than 1 worker
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(ValidationException):
             DownloadConfig(max_parallel_workers=0)
 
         # More than 32 workers
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(ValidationException):
             DownloadConfig(max_parallel_workers=33)
 
     def test_hash_algorithm_security_policy(self) -> None:
         # Disallow insecure algorithms
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(ValidationException):
             DownloadConfig(hash_algorithm="md5")
 
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(ValidationException):
             DownloadConfig(hash_algorithm="sha1")
 
         # Allow secure algorithms
@@ -477,7 +481,7 @@ class TestDownloadConfig(unittest.TestCase):
 
     def test_retry_range_validation(self) -> None:
         # retry_max_delay_seconds < retry_base_delay_seconds
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(ValidationException):
             DownloadConfig(
                 retry_base_delay_seconds=10.0,
                 retry_max_delay_seconds=2.0,
