@@ -45,6 +45,10 @@ from src.exceptions import (
     StoragePermissionError,
     TimeoutError,
 )
+from src.file_assembler import (
+    DEFAULT_ASSEMBLY_BUFFER_SIZE,
+    FileAssembler,
+)
 from src.models import (
     ChunkResult,
     ChunkSpec,
@@ -110,4 +114,7 @@ __all__ = [
     "apply_env_overrides",
     "load_config",
     "get_download_config",
+    # File Assembler
+    "FileAssembler",
+    "DEFAULT_ASSEMBLY_BUFFER_SIZE",
 ]
