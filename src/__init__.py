@@ -71,6 +71,11 @@ from src.manifest import (
     load_manifest,
     parse_manifest_json,
     validate_manifest_dict,
+    canonicalize_json,
+    generate_ed25519_keypair,
+    generate_rsa_keypair,
+    sign_manifest,
+    verify_manifest_signature,
 )
 
 __all__ = [
@@ -137,4 +142,9 @@ __all__ = [
     "parse_manifest_json",
     "load_manifest",
     "dump_manifest",
+    "canonicalize_json",
+    "generate_ed25519_keypair",
+    "generate_rsa_keypair",
+    "sign_manifest",
+    "verify_manifest_signature",
 ]

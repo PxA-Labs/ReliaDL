@@ -1,3 +1,4 @@
 pydantic>=2.0.0
 PyYAML>=6.0
 jsonschema>=4.0.0
+cryptography>=41.0.0
