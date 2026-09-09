@@ -45,6 +45,10 @@ from src.exceptions import (
     StoragePermissionError,
     TimeoutError,
 )
+from src.file_assembler import (
+    DEFAULT_ASSEMBLY_BUFFER_SIZE,
+    FileAssembler,
+)
 from src.hash_verifier import (
     DEFAULT_BUFFER_SIZE,
     StreamingHashVerifier,
@@ -147,4 +151,7 @@ __all__ = [
     "StateManager",
     "STATE_FILE_PERMISSIONS",
     "CHUNK_FILE_PERMISSIONS",
+    # File Assembler
+    "FileAssembler",
+    "DEFAULT_ASSEMBLY_BUFFER_SIZE",
 ]
