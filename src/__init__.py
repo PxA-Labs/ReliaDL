@@ -73,6 +73,11 @@ from src.models import (
     ProgressReport,
     VerificationResult,
 )
+from src.state_manager import (
+    CHUNK_FILE_PERMISSIONS,
+    STATE_FILE_PERMISSIONS,
+    StateManager,
+)
 
 __all__ = [
     # Enums & Models
@@ -138,4 +143,8 @@ __all__ = [
     "configure_logger",
     "get_logger",
     "redact_credentials",
+    # State Manager
+    "StateManager",
+    "STATE_FILE_PERMISSIONS",
+    "CHUNK_FILE_PERMISSIONS",
 ]
