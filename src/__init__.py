@@ -46,6 +46,25 @@ from src.exceptions import (
     SubBlockCorruptedError,
     TimeoutError,
 )
+from src.file_assembler import (
+    DEFAULT_ASSEMBLY_BUFFER_SIZE,
+    FileAssembler,
+)
+from src.hash_verifier import (
+    DEFAULT_BUFFER_SIZE,
+    StreamingHashVerifier,
+    async_verify_file_hash,
+    compute_file_hash,
+    constant_time_compare,
+    normalize_hash,
+    verify_file_hash,
+    verify_stream,
+)
+from src.logger import (
+    configure_logger,
+    get_logger,
+    redact_credentials,
+)
 from src.models import (
     ChunkResult,
     ChunkSpec,
@@ -57,33 +76,41 @@ from src.models import (
     DownloadStatistics,
     DownloadStatus,
     ProgressReport,
-    VerificationResult,
+)
+from src.sparse_writer import (
+    AllocationStrategy,
+    SparseFileWriter,
+)
+from src.state_manager import (
+    CHUNK_FILE_PERMISSIONS,
+    STATE_FILE_PERMISSIONS,
+    StateManager,
 )
 from src.manifest import (
-    MANIFEST_JSON_SCHEMA,
+    DEFAULT_SUB_BLOCK_SIZE,
     ArtifactMetadata,
+    BinaryMerkleTree,
     ChunkingTopology,
     ChunkManifest,
     ManifestChunk,
     ManifestGenerator,
+    MANIFEST_JSON_SCHEMA,
     ManifestSignature,
     MirrorSpec,
-    dump_manifest,
-    load_manifest,
-    parse_manifest_json,
-    validate_manifest_dict,
-    canonicalize_json,
-    generate_ed25519_keypair,
-    generate_rsa_keypair,
-    sign_manifest,
-    verify_manifest_signature,
-    DEFAULT_SUB_BLOCK_SIZE,
-    BinaryMerkleTree,
     SubBlockStreamValidator,
     calculate_sub_blocks,
+    canonicalize_json,
     compute_merkle_root,
+    dump_manifest,
+    generate_ed25519_keypair,
+    generate_rsa_keypair,
     hash_leaf,
     hash_parent,
+    load_manifest,
+    parse_manifest_json,
+    sign_manifest,
+    validate_manifest_dict,
+    verify_manifest_signature,
 )
 
 __all__ = [
@@ -138,6 +165,29 @@ __all__ = [
     "apply_env_overrides",
     "load_config",
     "get_download_config",
+    # Hash Verifier
+    "DEFAULT_BUFFER_SIZE",
+    "StreamingHashVerifier",
+    "normalize_hash",
+    "constant_time_compare",
+    "compute_file_hash",
+    "verify_file_hash",
+    "verify_stream",
+    "async_verify_file_hash",
+    # Logger
+    "configure_logger",
+    "get_logger",
+    "redact_credentials",
+    # State Manager
+    "StateManager",
+    "STATE_FILE_PERMISSIONS",
+    "CHUNK_FILE_PERMISSIONS",
+    # File Assembler
+    "FileAssembler",
+    "DEFAULT_ASSEMBLY_BUFFER_SIZE",
+    # Sparse Writer
+    "SparseFileWriter",
+    "AllocationStrategy",
     # Manifest
     "MANIFEST_JSON_SCHEMA",
     "ManifestGenerator",
