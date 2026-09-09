@@ -1,20 +1,30 @@
 """
-ChunkGuard Manifest (.cgmanifest) JSON Schema parser, validator, and model bindings.
+ChunkGuard Manifest (.cgmanifest) JSON Schema parser, validator, model bindings,
+and cryptographic signing/verification engine.
 Implements Draft 2020-12 schema validation, Pydantic v2 domain models,
-canonical RFC 8785 serialization, and ChunkSpec conversions.
+canonical RFC 8785 (JCS) serialization, Ed25519/RSA-PSS digital signatures,
+and ChunkSpec conversions.
 """
 
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 from typing import Any, Optional, Union
 
 import jsonschema
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ed25519, padding, rsa
 from jsonschema.validators import Draft202012Validator
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from src.exceptions import ManifestError, ManifestFormatError
+from src.exceptions import (
+    ManifestError,
+    ManifestFormatError,
+    ManifestSignatureMismatchError,
+)
 from src.models import ChunkSpec
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -124,6 +134,24 @@ MANIFEST_JSON_SCHEMA: dict[str, Any] = {
 }
 
 _VALIDATOR = Draft202012Validator(MANIFEST_JSON_SCHEMA)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Canonical JSON (RFC 8785 JCS)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def canonicalize_json(data: dict[str, Any]) -> bytes:
+    """
+    Serialize data dictionary to canonical JSON per RFC 8785 (JCS).
+    Sorts keys lexicographically by Unicode code points and eliminates whitespace.
+    """
+    return json.dumps(
+        data,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -246,6 +274,11 @@ class ChunkManifest(BaseModel):
     chunks: list[ManifestChunk]
     signature: Optional[ManifestSignature] = None
 
+    @property
+    def is_signed(self) -> bool:
+        """Whether the manifest contains a digital signature."""
+        return self.signature is not None
+
     def to_dict(self) -> dict[str, Any]:
         """Serialize manifest model to Python dictionary matching JSON Schema."""
         return self.model_dump(mode="json", exclude_none=True)
@@ -261,13 +294,7 @@ class ChunkManifest(BaseModel):
         """
         payload = self.to_dict()
         payload.pop("signature", None)
-        canonical_str = json.dumps(
-            payload,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-        )
-        return canonical_str.encode("utf-8")
+        return canonicalize_json(payload)
 
     def get_chunk_specs(self) -> list[ChunkSpec]:
         """Convert all chunk definitions to a list of ChunkSpec domain objects."""
@@ -276,6 +303,355 @@ class ChunkManifest(BaseModel):
     def save(self, target_path: Union[str, Path]) -> None:
         """Save manifest to filesystem at target_path."""
         dump_manifest(self, target_path)
+
+    def sign(
+        self,
+        private_key: Union[ed25519.Ed25519PrivateKey, rsa.RSAPrivateKey, str, bytes],
+        key_id: str,
+        algorithm: str = "ed25519",
+        include_public_key: bool = True,
+    ) -> ChunkManifest:
+        """Cryptographically sign this manifest in-place."""
+        return sign_manifest(
+            manifest=self,
+            private_key=private_key,
+            key_id=key_id,
+            algorithm=algorithm,
+            include_public_key=include_public_key,
+        )
+
+    def verify_signature(
+        self,
+        trusted_public_key: Optional[Union[ed25519.Ed25519PublicKey, rsa.RSAPublicKey, str, bytes]] = None,
+        manifest_path: Optional[str] = None,
+    ) -> bool:
+        """Cryptographically verify this manifest's digital signature."""
+        return verify_manifest_signature(
+            manifest=self,
+            trusted_public_key=trusted_public_key,
+            manifest_path=manifest_path,
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Key Management and Cryptographic Operations
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def generate_ed25519_keypair() -> tuple[ed25519.Ed25519PrivateKey, ed25519.Ed25519PublicKey]:
+    """Generate a new Ed25519 private/public keypair."""
+    priv = ed25519.Ed25519PrivateKey.generate()
+    pub = priv.public_key()
+    return priv, pub
+
+
+def generate_rsa_keypair(key_size: int = 2048) -> tuple[rsa.RSAPrivateKey, rsa.RSAPublicKey]:
+    """Generate a new RSA private/public keypair (for RSA-PSS signing)."""
+    priv = rsa.generate_private_key(public_exponent=65537, key_size=key_size)
+    pub = priv.public_key()
+    return priv, pub
+
+
+def public_key_to_base64(public_key: Union[ed25519.Ed25519PublicKey, rsa.RSAPublicKey]) -> str:
+    """Encode public key to base64 string."""
+    if isinstance(public_key, ed25519.Ed25519PublicKey):
+        raw_bytes = public_key.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        return base64.b64encode(raw_bytes).decode("ascii")
+    elif isinstance(public_key, rsa.RSAPublicKey):
+        der_bytes = public_key.public_bytes(
+            encoding=serialization.Encoding.DER,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        return base64.b64encode(der_bytes).decode("ascii")
+    raise ValueError(f"Unsupported public key type: {type(public_key)}")
+
+
+def public_key_to_pem(public_key: Union[ed25519.Ed25519PublicKey, rsa.RSAPublicKey]) -> str:
+    """Export public key in PEM format string."""
+    pem_bytes = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    return pem_bytes.decode("utf-8")
+
+
+def private_key_to_pem(private_key: Union[ed25519.Ed25519PrivateKey, rsa.RSAPrivateKey]) -> str:
+    """Export private key in PKCS8 unencrypted PEM format string."""
+    pem_bytes = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    return pem_bytes.decode("utf-8")
+
+
+def load_public_key(
+    key_input: Union[ed25519.Ed25519PublicKey, rsa.RSAPublicKey, str, bytes],
+    algorithm: str = "ed25519",
+) -> Union[ed25519.Ed25519PublicKey, rsa.RSAPublicKey]:
+    """
+    Parse a public key from an object, PEM string, base64 string, or raw bytes.
+
+    Args:
+        key_input: Public key in any supported format.
+        algorithm: Expected algorithm ('ed25519' or 'rsa-pss-sha256').
+
+    Returns:
+        Ed25519PublicKey or RSAPublicKey instance.
+    """
+    if isinstance(key_input, (ed25519.Ed25519PublicKey, rsa.RSAPublicKey)):
+        return key_input
+
+    raw_bytes = key_input.encode("utf-8") if isinstance(key_input, str) else key_input
+
+    # PEM format
+    if b"-----BEGIN" in raw_bytes:
+        loaded = serialization.load_pem_public_key(raw_bytes)
+        if isinstance(loaded, (ed25519.Ed25519PublicKey, rsa.RSAPublicKey)):
+            return loaded
+        raise ValueError(f"Loaded key {type(loaded)} is not an Ed25519 or RSA public key")
+
+    # Raw or base64
+    try:
+        decoded = base64.b64decode(raw_bytes, validate=True)
+    except Exception:
+        decoded = raw_bytes
+
+    if algorithm == "ed25519":
+        if len(decoded) == 32:
+            return ed25519.Ed25519PublicKey.from_public_bytes(decoded)
+        # Try DER
+        try:
+            return serialization.load_der_public_key(decoded)  # type: ignore[return-value]
+        except Exception as err:
+            raise ValueError(f"Invalid Ed25519 public key bytes ({len(decoded)} bytes): {err}")
+    else:
+        # RSA
+        try:
+            return serialization.load_der_public_key(decoded)  # type: ignore[return-value]
+        except Exception as err:
+            raise ValueError(f"Invalid RSA public key bytes: {err}")
+
+
+def load_private_key(
+    key_input: Union[ed25519.Ed25519PrivateKey, rsa.RSAPrivateKey, str, bytes],
+    algorithm: str = "ed25519",
+) -> Union[ed25519.Ed25519PrivateKey, rsa.RSAPrivateKey]:
+    """
+    Parse a private key from an object, PEM string, base64 string, or raw bytes.
+
+    Args:
+        key_input: Private key in any supported format.
+        algorithm: Expected algorithm ('ed25519' or 'rsa-pss-sha256').
+
+    Returns:
+        Ed25519PrivateKey or RSAPrivateKey instance.
+    """
+    if isinstance(key_input, (ed25519.Ed25519PrivateKey, rsa.RSAPrivateKey)):
+        return key_input
+
+    raw_bytes = key_input.encode("utf-8") if isinstance(key_input, str) else key_input
+
+    # PEM format
+    if b"-----BEGIN" in raw_bytes:
+        loaded = serialization.load_pem_private_key(raw_bytes, password=None)
+        if isinstance(loaded, (ed25519.Ed25519PrivateKey, rsa.RSAPrivateKey)):
+            return loaded
+        raise ValueError(f"Loaded key {type(loaded)} is not an Ed25519 or RSA private key")
+
+    # Raw or base64
+    try:
+        decoded = base64.b64decode(raw_bytes, validate=True)
+    except Exception:
+        decoded = raw_bytes
+
+    if algorithm == "ed25519":
+        if len(decoded) == 32:
+            return ed25519.Ed25519PrivateKey.from_private_bytes(decoded)
+        try:
+            return serialization.load_der_private_key(decoded, password=None)  # type: ignore[return-value]
+        except Exception as err:
+            raise ValueError(f"Invalid Ed25519 private key bytes ({len(decoded)} bytes): {err}")
+    else:
+        try:
+            return serialization.load_der_private_key(decoded, password=None)  # type: ignore[return-value]
+        except Exception as err:
+            raise ValueError(f"Invalid RSA private key bytes: {err}")
+
+
+def sign_manifest(
+    manifest: ChunkManifest,
+    private_key: Union[ed25519.Ed25519PrivateKey, rsa.RSAPrivateKey, str, bytes],
+    key_id: str,
+    algorithm: str = "ed25519",
+    include_public_key: bool = True,
+) -> ChunkManifest:
+    """
+    Digitally sign a manifest per RFC 8785 JCS canonicalization.
+
+    Args:
+        manifest: Manifest to sign.
+        private_key: Ed25519 or RSA private key.
+        key_id: Key identifier (e.g. 'release-2026-q3').
+        algorithm: 'ed25519' or 'rsa-pss-sha256'.
+        include_public_key: Embed base64-encoded public key in manifest.
+
+    Returns:
+        The updated manifest instance with signature attached.
+    """
+    normalized_algo = algorithm.lower().strip()
+    if normalized_algo not in ("ed25519", "rsa-pss-sha256"):
+        raise ValueError(f"Unsupported signing algorithm: {algorithm}")
+
+    priv_key_obj = load_private_key(private_key, algorithm=normalized_algo)
+    canonical_payload = manifest.to_canonical_json()
+
+    if normalized_algo == "ed25519":
+        if not isinstance(priv_key_obj, ed25519.Ed25519PrivateKey):
+            raise ValueError("Algorithm is ed25519 but provided key is not Ed25519PrivateKey")
+        sig_bytes = priv_key_obj.sign(canonical_payload)
+        pub_key_b64 = public_key_to_base64(priv_key_obj.public_key()) if include_public_key else None
+    else:
+        if not isinstance(priv_key_obj, rsa.RSAPrivateKey):
+            raise ValueError("Algorithm is rsa-pss-sha256 but provided key is not RSAPrivateKey")
+        sig_bytes = priv_key_obj.sign(
+            canonical_payload,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH,
+            ),
+            hashes.SHA256(),
+        )
+        pub_key_b64 = public_key_to_base64(priv_key_obj.public_key()) if include_public_key else None
+
+    manifest.signature = ManifestSignature(
+        algorithm=normalized_algo,
+        key_id=key_id,
+        public_key=pub_key_b64,
+        signature_hex=sig_bytes.hex(),
+    )
+    return manifest
+
+
+def verify_manifest_signature(
+    manifest: ChunkManifest,
+    trusted_public_key: Optional[Union[ed25519.Ed25519PublicKey, rsa.RSAPublicKey, str, bytes]] = None,
+    manifest_path: Optional[str] = None,
+) -> bool:
+    """
+    Verify the cryptographic digital signature of a ChunkManifest.
+
+    Args:
+        manifest: Manifest instance to verify.
+        trusted_public_key: Explicit trusted public key. If None, uses embedded public key.
+        manifest_path: Optional path for error context.
+
+    Returns:
+        True if signature is valid.
+
+    Raises:
+        ManifestSignatureMismatchError: If signature verification fails or key is missing.
+    """
+    if manifest.signature is None:
+        raise ManifestSignatureMismatchError(
+            "Manifest has no digital signature block",
+            manifest_path=manifest_path,
+        )
+
+    sig_spec = manifest.signature
+    key_id = sig_spec.key_id
+    algo = sig_spec.algorithm
+
+    # Determine public key source
+    key_to_use = trusted_public_key
+    if key_to_use is None:
+        if sig_spec.public_key:
+            key_to_use = sig_spec.public_key
+        else:
+            raise ManifestSignatureMismatchError(
+                f"No public key supplied and manifest signature (key_id='{key_id}') contains no embedded key",
+                key_id=key_id,
+                algorithm=algo,
+                manifest_path=manifest_path,
+            )
+
+    try:
+        pub_key_obj = load_public_key(key_to_use, algorithm=algo)
+    except Exception as err:
+        raise ManifestSignatureMismatchError(
+            f"Failed to parse public key for verification: {err}",
+            key_id=key_id,
+            algorithm=algo,
+            manifest_path=manifest_path,
+        )
+
+    try:
+        sig_bytes = bytes.fromhex(sig_spec.signature_hex)
+    except ValueError as err:
+        raise ManifestSignatureMismatchError(
+            f"Malformed signature hex string in manifest: {err}",
+            key_id=key_id,
+            algorithm=algo,
+            manifest_path=manifest_path,
+        )
+
+    canonical_payload = manifest.to_canonical_json()
+
+    if algo == "ed25519":
+        if not isinstance(pub_key_obj, ed25519.Ed25519PublicKey):
+            raise ManifestSignatureMismatchError(
+                "Signature algorithm is ed25519 but public key is not Ed25519PublicKey",
+                key_id=key_id,
+                algorithm=algo,
+                manifest_path=manifest_path,
+            )
+        try:
+            pub_key_obj.verify(sig_bytes, canonical_payload)
+            return True
+        except InvalidSignature:
+            raise ManifestSignatureMismatchError(
+                f"Ed25519 digital signature validation failed for key_id='{key_id}'",
+                key_id=key_id,
+                algorithm=algo,
+                manifest_path=manifest_path,
+            )
+
+    elif algo == "rsa-pss-sha256":
+        if not isinstance(pub_key_obj, rsa.RSAPublicKey):
+            raise ManifestSignatureMismatchError(
+                "Signature algorithm is rsa-pss-sha256 but public key is not RSAPublicKey",
+                key_id=key_id,
+                algorithm=algo,
+                manifest_path=manifest_path,
+            )
+        try:
+            pub_key_obj.verify(
+                sig_bytes,
+                canonical_payload,
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
+                hashes.SHA256(),
+            )
+            return True
+        except InvalidSignature:
+            raise ManifestSignatureMismatchError(
+                f"RSA-PSS digital signature validation failed for key_id='{key_id}'",
+                key_id=key_id,
+                algorithm=algo,
+                manifest_path=manifest_path,
+            )
+
+    raise ManifestSignatureMismatchError(
+        f"Unsupported signature algorithm '{algo}'",
+        key_id=key_id,
+        algorithm=algo,
+        manifest_path=manifest_path,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
