@@ -379,6 +379,36 @@ class ChunkHashMismatchError(IntegrityError):
         super().__init__(message, context=ctx, **kwargs)
 
 
+class SubBlockCorruptedError(ChunkHashMismatchError):
+    """Raised when a 64 KB sub-block streaming hash verification fails (SBM-IA)."""
+
+    def __init__(
+        self,
+        message: str,
+        sub_block_index: int,
+        expected_hash: Optional[str] = None,
+        computed_hash: Optional[str] = None,
+        chunk_index: Optional[int] = None,
+        offset: Optional[int] = None,
+        context: Optional[dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> None:
+        ctx = context.copy() if context else {}
+        ctx["sub_block_index"] = sub_block_index
+        if offset is not None:
+            ctx["offset"] = offset
+        self.sub_block_index = sub_block_index
+        self.offset = offset
+        super().__init__(
+            message,
+            chunk_index=chunk_index,
+            expected_hash=expected_hash,
+            computed_hash=computed_hash,
+            context=ctx,
+            **kwargs,
+        )
+
+
 class FileHashMismatchError(IntegrityError):
     """Raised when whole-file post-assembly hash verification does not match."""
 
