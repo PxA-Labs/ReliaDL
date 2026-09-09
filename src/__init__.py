@@ -75,7 +75,10 @@ from src.models import (
     DownloadStatistics,
     DownloadStatus,
     ProgressReport,
-    VerificationResult,
+)
+from src.sparse_writer import (
+    AllocationStrategy,
+    SparseFileWriter,
 )
 from src.state_manager import (
     CHUNK_FILE_PERMISSIONS,
@@ -154,4 +157,7 @@ __all__ = [
     # File Assembler
     "FileAssembler",
     "DEFAULT_ASSEMBLY_BUFFER_SIZE",
+    # Sparse Writer
+    "SparseFileWriter",
+    "AllocationStrategy",
 ]
