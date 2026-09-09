@@ -55,6 +55,11 @@ from src.hash_verifier import (
     verify_file_hash,
     verify_stream,
 )
+from src.logger import (
+    configure_logger,
+    get_logger,
+    redact_credentials,
+)
 from src.models import (
     ChunkResult,
     ChunkSpec,
@@ -129,4 +134,8 @@ __all__ = [
     "verify_file_hash",
     "verify_stream",
     "async_verify_file_hash",
+    # Logger
+    "configure_logger",
+    "get_logger",
+    "redact_credentials",
 ]
