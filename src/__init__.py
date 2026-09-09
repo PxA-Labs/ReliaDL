@@ -45,6 +45,16 @@ from src.exceptions import (
     StoragePermissionError,
     TimeoutError,
 )
+from src.hash_verifier import (
+    DEFAULT_BUFFER_SIZE,
+    StreamingHashVerifier,
+    async_verify_file_hash,
+    compute_file_hash,
+    constant_time_compare,
+    normalize_hash,
+    verify_file_hash,
+    verify_stream,
+)
 from src.logger import (
     configure_logger,
     get_logger,
@@ -115,6 +125,15 @@ __all__ = [
     "apply_env_overrides",
     "load_config",
     "get_download_config",
+    # Hash Verifier
+    "DEFAULT_BUFFER_SIZE",
+    "StreamingHashVerifier",
+    "normalize_hash",
+    "constant_time_compare",
+    "compute_file_hash",
+    "verify_file_hash",
+    "verify_stream",
+    "async_verify_file_hash",
     # Logger
     "configure_logger",
     "get_logger",
