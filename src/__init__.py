@@ -45,6 +45,11 @@ from src.exceptions import (
     StoragePermissionError,
     TimeoutError,
 )
+from src.logger import (
+    configure_logger,
+    get_logger,
+    redact_credentials,
+)
 from src.models import (
     ChunkResult,
     ChunkSpec,
@@ -110,4 +115,8 @@ __all__ = [
     "apply_env_overrides",
     "load_config",
     "get_download_config",
+    # Logger
+    "configure_logger",
+    "get_logger",
+    "redact_credentials",
 ]
