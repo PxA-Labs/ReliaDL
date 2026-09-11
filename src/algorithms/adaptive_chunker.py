@@ -36,11 +36,13 @@ The result is quantized to a power of two for allocator and page alignment.
 from __future__ import annotations
 
 import math
+import threading
 from dataclasses import dataclass
 from typing import Optional
 
 from src.algorithms.metrics_collector import NetworkStateSnapshot
 from src.exceptions import ConfigurationError
+from src.models import ChunkSpec
 
 # Scaling coefficient applied to the loss-sensitivity term.
 DEFAULT_GAMMA = 1.0
@@ -244,6 +246,11 @@ class BLDCSController:
         return self._max
 
     @property
+    def default_chunk_size(self) -> int:
+        """Chunk size used before the estimators are primed."""
+        return self._default
+
+    @property
     def aligns_to_power_of_two(self) -> bool:
         """Whether outputs are quantized to powers of two."""
         return self._align
@@ -325,4 +332,179 @@ class BLDCSController:
         return (
             f"BLDCSController(gamma={self._gamma}, lambda={self._lambda}, "
             f"overhead={self._overhead}s, bounds=[{self._min}, {self._max}])"
+        )
+
+
+class DynamicChunkPlanner:
+    """
+    Generates variable-sized chunk boundaries on demand during a transfer.
+
+    Unlike a static partitioner, which fixes every boundary before the first
+    byte moves, the planner issues one range at a time and asks the controller
+    for a fresh size at each request. A transfer that degrades halfway through
+    therefore narrows its remaining chunks instead of committing to a plan made
+    under conditions that no longer hold.
+
+    Boundaries are contiguous and non-overlapping by construction: each chunk
+    begins where the previous one ended, and the final chunk terminates at
+    exactly ``file_size - 1``.
+    """
+
+    def __init__(
+        self,
+        file_size: int,
+        controller: Optional[BLDCSController] = None,
+        start_offset: int = 0,
+        start_index: int = 0,
+    ) -> None:
+        if isinstance(file_size, bool) or not isinstance(file_size, int):
+            raise ConfigurationError(
+                f"file_size must be an integer, got {type(file_size).__name__}",
+                parameter="file_size",
+                value=file_size,
+            )
+        if file_size < 0:
+            raise ConfigurationError(
+                f"file_size must be non-negative, got {file_size}",
+                parameter="file_size",
+                value=file_size,
+            )
+        if not 0 <= start_offset <= file_size:
+            raise ConfigurationError(
+                f"start_offset ({start_offset}) must lie within [0, {file_size}]",
+                parameter="start_offset",
+                value=start_offset,
+            )
+        if start_index < 0:
+            raise ConfigurationError(
+                f"start_index must be non-negative, got {start_index}",
+                parameter="start_index",
+                value=start_index,
+            )
+
+        self._file_size = file_size
+        self._controller = controller or BLDCSController()
+        self._offset = start_offset
+        self._index = start_index
+        self._lock = threading.RLock()
+
+    @property
+    def file_size(self) -> int:
+        """Total size of the artifact being partitioned."""
+        return self._file_size
+
+    @property
+    def controller(self) -> BLDCSController:
+        """Sizing controller consulted for each boundary."""
+        return self._controller
+
+    @property
+    def next_offset(self) -> int:
+        """Byte offset at which the next chunk will begin."""
+        return self._offset
+
+    @property
+    def next_index(self) -> int:
+        """Index that will be assigned to the next chunk."""
+        return self._index
+
+    @property
+    def remaining_bytes(self) -> int:
+        """Bytes not yet covered by an issued chunk."""
+        return self._file_size - self._offset
+
+    @property
+    def is_exhausted(self) -> bool:
+        """True once every byte of the artifact has been assigned to a chunk."""
+        return self._offset >= self._file_size
+
+    def next_chunk(
+        self, state: Optional[NetworkStateSnapshot] = None
+    ) -> Optional[ChunkSpec]:
+        """
+        Issue the next chunk specification, or None when the file is covered.
+
+        The size is taken from the controller for the supplied network state;
+        the final chunk is truncated to whatever remains so the range always
+        ends at ``file_size - 1``.
+        """
+        with self._lock:
+            if self.is_exhausted:
+                return None
+
+            if state is None:
+                size = self._controller.default_chunk_size
+            else:
+                size = self._controller.compute_chunk_size(state)
+
+            size = min(size, self.remaining_bytes)
+            start = self._offset
+            end = start + size - 1
+
+            spec = ChunkSpec(index=self._index, start_byte=start, end_byte=end)
+            self._offset = end + 1
+            self._index += 1
+            return spec
+
+    def plan_all(
+        self, state: Optional[NetworkStateSnapshot] = None
+    ) -> list[ChunkSpec]:
+        """
+        Drain the planner into a complete partition under a fixed network state.
+
+        Intended for manifest generation and tests; a live transfer should call
+        next_chunk() per request so each boundary reflects current conditions.
+        """
+        specs: list[ChunkSpec] = []
+        while True:
+            spec = self.next_chunk(state)
+            if spec is None:
+                return specs
+            specs.append(spec)
+
+    def reset(self) -> None:
+        """Return the planner to the start of the artifact."""
+        with self._lock:
+            self._offset = 0
+            self._index = 0
+
+    def to_dict(self) -> dict:
+        """
+        Serialize planner position for crash-resilient resume.
+
+        Only the cursor is persisted. Chunk sizes are not replayed, so a resumed
+        transfer re-partitions the remaining bytes under current conditions
+        rather than inheriting boundaries chosen for a stale network state.
+        """
+        with self._lock:
+            return {
+                "file_size": self._file_size,
+                "next_offset": self._offset,
+                "next_index": self._index,
+            }
+
+    @classmethod
+    def from_dict(
+        cls, data: dict, controller: Optional[BLDCSController] = None
+    ) -> "DynamicChunkPlanner":
+        """Restore a planner from its serialized cursor."""
+        for key in ("file_size", "next_offset", "next_index"):
+            if key not in data:
+                raise ConfigurationError(
+                    f"Serialized planner is missing required key '{key}'",
+                    parameter=key,
+                    value=data,
+                )
+        return cls(
+            file_size=data["file_size"],
+            controller=controller,
+            start_offset=data["next_offset"],
+            start_index=data["next_index"],
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"DynamicChunkPlanner(file_size={self._file_size}, "
+            f"next_offset={self._offset}, next_index={self._index}, "
+            f"remaining={self.remaining_bytes})"
         )

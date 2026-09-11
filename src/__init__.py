@@ -17,6 +17,7 @@ from src.config import (
 from src.algorithms.adaptive_chunker import (
     BLDCSController,
     ChunkSizingDecision,
+    DynamicChunkPlanner,
     align_to_power_of_two,
     is_power_of_two,
 )
@@ -242,6 +243,7 @@ __all__ = [
     "NetworkMetricsCollector",
     "BLDCSController",
     "ChunkSizingDecision",
+    "DynamicChunkPlanner",
     "align_to_power_of_two",
     "is_power_of_two",
 ]
