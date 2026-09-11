@@ -14,6 +14,12 @@ from src.config import (
     load_yaml_file,
     parse_size,
 )
+from src.algorithms.adaptive_chunker import (
+    BLDCSController,
+    ChunkSizingDecision,
+    align_to_power_of_two,
+    is_power_of_two,
+)
 from src.algorithms.metrics_collector import (
     DEFAULT_DEVIATION_ALPHA,
     DEFAULT_FAILURE_WINDOW_SIZE,
@@ -234,4 +240,8 @@ __all__ = [
     "TransferSample",
     "NetworkStateSnapshot",
     "NetworkMetricsCollector",
+    "BLDCSController",
+    "ChunkSizingDecision",
+    "align_to_power_of_two",
+    "is_power_of_two",
 ]

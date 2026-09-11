@@ -332,6 +332,33 @@ class TestNetworkMetricsCollector(unittest.TestCase):
             collector.snapshot().throughput_bps, 5_000_000.0, delta=600_000.0
         )
 
+    def test_mean_transfer_bytes_tracked(self) -> None:
+        collector = NetworkMetricsCollector()
+        for _ in range(30):
+            collector.record_sample(
+                bytes_transferred=8 * 1024 * 1024, duration_seconds=1.0
+            )
+        self.assertAlmostEqual(
+            collector.snapshot().mean_transfer_bytes,
+            float(8 * 1024 * 1024),
+            delta=1.0,
+        )
+
+    def test_mean_transfer_bytes_excludes_failures(self) -> None:
+        """A failed partial transfer must not shrink the observed chunk size."""
+        collector = NetworkMetricsCollector()
+        collector.record_sample(
+            bytes_transferred=8 * 1024 * 1024, duration_seconds=1.0
+        )
+        baseline = collector.snapshot().mean_transfer_bytes
+        collector.record_sample(
+            bytes_transferred=512, duration_seconds=1.0, success=False
+        )
+        self.assertEqual(collector.snapshot().mean_transfer_bytes, baseline)
+
+    def test_mean_transfer_bytes_none_before_priming(self) -> None:
+        self.assertIsNone(NetworkMetricsCollector().snapshot().mean_transfer_bytes)
+
     def test_snapshot_is_immutable(self) -> None:
         collector = NetworkMetricsCollector()
         collector.record_sample(bytes_transferred=1000, duration_seconds=1.0)
