@@ -264,6 +264,21 @@ class TestCircuitBreakerValidation(unittest.TestCase):
         with self.assertRaises(ConfigurationError):
             CircuitBreaker(cooldown_seconds=60.0, max_cooldown_seconds=30.0)
 
+    def test_a_long_cooldown_alone_raises_its_own_cap(self) -> None:
+        """
+        A caller who sets only a long cooldown means it.
+
+        Requiring them to discover a separate ceiling before their own setting
+        becomes legal is friction with no benefit, so the cap defaults relative
+        to the base rather than to a fixed constant. An explicitly conflicting
+        pair is still rejected by the test above.
+        """
+        breaker = CircuitBreaker(
+            failure_threshold=1, cooldown_seconds=600.0, clock=FakeClock()
+        )
+        self.assertAlmostEqual(breaker.cooldown_seconds, 600.0, places=9)
+        MirrorHealthMonitor(MIRRORS, cooldown_seconds=600.0)
+
     def test_repr(self) -> None:
         self.assertIn("state=CLOSED", repr(CircuitBreaker()))
 
