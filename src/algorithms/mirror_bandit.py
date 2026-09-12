@@ -98,8 +98,10 @@ from __future__ import annotations
 import math
 import random
 import threading
+import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, Tuple
+from enum import Enum
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from src.exceptions import ConfigurationError
 
@@ -717,4 +719,604 @@ class EXP3Bandit:
         return (
             f"EXP3Bandit(arms={len(self._arms)}, eta={self._eta}, "
             f"decay={self._decay}, rounds={self._rounds})"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Mirror health and reward calculation
+# ---------------------------------------------------------------------------
+#
+# EXP3 consumes a scalar reward in [0, 1] and says nothing about where it comes
+# from. Supplying it is this half of the module, and the normalization is the
+# whole difficulty: throughput is an unbounded quantity in bytes per second and
+# the bandit needs a bounded one.
+#
+#     r = (Throughput / PeakThroughput) * (1 - error_flag)
+#
+# The peak is tracked across the whole mirror pool rather than per mirror,
+# because the rewards have to be comparable between arms for the comparison to
+# mean anything. Normalizing each mirror against its own historical best would
+# score every mirror near 1 whenever it performed typically for itself, and a
+# uniformly mediocre edge would look identical to a fast one.
+#
+# An error scores zero rather than a small value. EXP3 needs no penalty term
+# because exp(0) = 1 leaves the weight untouched while every competing mirror's
+# weight climbs past it, so a failing mirror is demoted by everyone else's
+# success rather than by an explicit punishment.
+#
+# Repeated failures are a different problem from low reward, and the bandit
+# alone handles them badly. A mirror returning connection errors still holds the
+# eta/M exploration floor, so a dead edge would keep drawing its share of
+# requests forever — each one costing a connection timeout. The circuit breaker
+# removes it from the pool outright, then lets it back after a cooldown so a
+# recovered edge is not blacklisted permanently.
+
+
+# Consecutive failures before a mirror is removed from the pool. Consecutive
+# rather than cumulative: an edge that fails one request in fifty is degraded
+# but usable, while three in a row is a mirror that is down.
+DEFAULT_FAILURE_THRESHOLD = 3
+
+# Seconds a mirror stays blacklisted before a trial request is allowed.
+DEFAULT_COOLDOWN_SECONDS = 30.0
+
+# Multiplier applied to the cooldown each time a trial fails again, so a
+# persistently dead mirror is retried with decreasing frequency instead of
+# being probed every cooldown forever.
+DEFAULT_BACKOFF_MULTIPLIER = 2.0
+
+# Ceiling on the backed-off cooldown. Without it an outage lasting hours would
+# push the retry interval past the length of any plausible transfer, and the
+# mirror would never be reconsidered even after recovering.
+DEFAULT_MAX_COOLDOWN_SECONDS = 300.0
+
+# Per-observation decay applied to the peak throughput. A single spuriously
+# fast sample — a small range served from cache, or one whose duration rounds
+# toward the clock's resolution — would otherwise depress every subsequent
+# reward for the rest of the transfer. Decaying the peak lets such an outlier
+# fade while a genuinely fast mirror keeps re-establishing it.
+DEFAULT_PEAK_DECAY = 0.01
+
+# Smallest transfer whose throughput is allowed to set a new peak. Short
+# transfers are dominated by connection setup and timer granularity, so their
+# apparent rate is unreliable in both directions.
+DEFAULT_MIN_PEAK_SAMPLE_BYTES = 64 * 1024
+
+
+class CircuitState(str, Enum):
+    """Availability state of one mirror."""
+
+    # Healthy: requests flow normally.
+    CLOSED = "CLOSED"
+
+    # Blacklisted after consecutive failures; no requests are issued.
+    OPEN = "OPEN"
+
+    # Cooldown elapsed; a trial request is allowed to test for recovery.
+    HALF_OPEN = "HALF_OPEN"
+
+
+@dataclass(frozen=True)
+class MirrorReward:
+    """
+    The reward for one completed request, with the terms that produced it.
+
+    Retains the raw throughput and the peak it was normalized against, because
+    a reward of 0.2 is uninterpretable on its own — it could mean a slow mirror
+    or a fast one measured against an inflated peak.
+
+    Attributes:
+        mirror: Mirror the request was issued to.
+        reward: Normalized reward in [0, 1], ready for the bandit.
+        throughput_bps: Observed throughput in bytes per second.
+        peak_bps: Pool-wide peak the observation was normalized against.
+        errored: Whether the request failed.
+        circuit_state: The mirror's availability after this observation.
+    """
+
+    mirror: str
+    reward: float
+    throughput_bps: float
+    peak_bps: float
+    errored: bool
+    circuit_state: CircuitState
+
+    def __repr__(self) -> str:
+        return (
+            f"MirrorReward(mirror={self.mirror!r}, reward={self.reward:.4f}, "
+            f"throughput={self.throughput_bps:.0f}B/s, "
+            f"errored={self.errored}, circuit={self.circuit_state.value})"
+        )
+
+
+class CircuitBreaker:
+    """
+    Removes a repeatedly failing mirror from the pool, then lets it back.
+
+    Three states rather than two. A blacklisted mirror cannot be restored by
+    evidence, because while it is blacklisted no requests are issued to it and
+    no evidence can arrive; the half-open state is what breaks that deadlock by
+    admitting one trial request to find out.
+
+    Time is injected rather than read from a module-level clock so recovery
+    after a cooldown can be tested without sleeping through it.
+    """
+
+    def __init__(
+        self,
+        failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
+        cooldown_seconds: float = DEFAULT_COOLDOWN_SECONDS,
+        backoff_multiplier: float = DEFAULT_BACKOFF_MULTIPLIER,
+        max_cooldown_seconds: float = DEFAULT_MAX_COOLDOWN_SECONDS,
+        clock: Optional[Callable[[], float]] = None,
+    ) -> None:
+        if isinstance(failure_threshold, bool) or not isinstance(
+            failure_threshold, int
+        ):
+            raise ConfigurationError(
+                "failure_threshold must be an integer, got "
+                f"{type(failure_threshold).__name__}",
+                parameter="failure_threshold",
+                value=failure_threshold,
+            )
+        if failure_threshold < 1:
+            raise ConfigurationError(
+                f"failure_threshold must be at least 1, got {failure_threshold}",
+                parameter="failure_threshold",
+                value=failure_threshold,
+            )
+        self._threshold = failure_threshold
+        self._base_cooldown = _validate_positive_seconds(
+            cooldown_seconds, "cooldown_seconds"
+        )
+        self._max_cooldown = _validate_positive_seconds(
+            max_cooldown_seconds, "max_cooldown_seconds"
+        )
+        if self._max_cooldown < self._base_cooldown:
+            raise ConfigurationError(
+                f"max_cooldown_seconds ({max_cooldown_seconds}) must be at least "
+                f"cooldown_seconds ({cooldown_seconds})",
+                parameter="max_cooldown_seconds",
+                value=max_cooldown_seconds,
+            )
+        if isinstance(backoff_multiplier, bool) or not isinstance(
+            backoff_multiplier, (int, float)
+        ):
+            raise ConfigurationError(
+                "backoff_multiplier must be numeric, got "
+                f"{type(backoff_multiplier).__name__}",
+                parameter="backoff_multiplier",
+                value=backoff_multiplier,
+            )
+        if not math.isfinite(float(backoff_multiplier)) or backoff_multiplier < 1.0:
+            raise ConfigurationError(
+                "backoff_multiplier must be a finite number of at least 1, got "
+                f"{backoff_multiplier}",
+                parameter="backoff_multiplier",
+                value=backoff_multiplier,
+            )
+
+        self._backoff = float(backoff_multiplier)
+        self._clock = clock if clock is not None else time.monotonic
+        self._consecutive_failures = 0
+        self._opened_at: Optional[float] = None
+        self._current_cooldown = self._base_cooldown
+        self._trips = 0
+
+    @property
+    def failure_threshold(self) -> int:
+        """Consecutive failures that trip the breaker."""
+        return self._threshold
+
+    @property
+    def cooldown_seconds(self) -> float:
+        """Cooldown currently in force, after any backoff."""
+        return self._current_cooldown
+
+    @property
+    def consecutive_failures(self) -> int:
+        """Failures since the last success."""
+        return self._consecutive_failures
+
+    @property
+    def trips(self) -> int:
+        """Number of times the breaker has opened."""
+        return self._trips
+
+    @property
+    def state(self) -> CircuitState:
+        """
+        Current availability, promoting to half-open once the cooldown elapses.
+
+        Derived from the clock rather than stored, so no timer has to fire for a
+        mirror to become eligible again.
+        """
+        if self._opened_at is None:
+            return CircuitState.CLOSED
+        if self._clock() - self._opened_at >= self._current_cooldown:
+            return CircuitState.HALF_OPEN
+        return CircuitState.OPEN
+
+    @property
+    def is_available(self) -> bool:
+        """Whether a request may be issued to this mirror."""
+        return self.state is not CircuitState.OPEN
+
+    @property
+    def seconds_until_retry(self) -> float:
+        """Seconds remaining before a trial request is permitted; 0 if available."""
+        if self._opened_at is None:
+            return 0.0
+        remaining = self._current_cooldown - (self._clock() - self._opened_at)
+        return max(0.0, remaining)
+
+    def record_success(self) -> CircuitState:
+        """
+        Register a successful request, closing the breaker.
+
+        Resets the backoff as well as the failure count: a mirror that has
+        served a request is healthy now, and holding a long cooldown against it
+        would punish it for an outage it has recovered from.
+        """
+        self._consecutive_failures = 0
+        self._opened_at = None
+        self._current_cooldown = self._base_cooldown
+        return CircuitState.CLOSED
+
+    def record_failure(self) -> CircuitState:
+        """
+        Register a failed request, opening the breaker once the threshold is met.
+
+        A failure while half-open reopens immediately regardless of the count,
+        since the trial request existed precisely to answer whether the mirror
+        had recovered, and it answered no.
+        """
+        was_half_open = self.state is CircuitState.HALF_OPEN
+        self._consecutive_failures += 1
+
+        if was_half_open:
+            self._current_cooldown = min(
+                self._max_cooldown, self._current_cooldown * self._backoff
+            )
+            self._opened_at = self._clock()
+            self._trips += 1
+            return self.state
+
+        if self._consecutive_failures >= self._threshold and self._opened_at is None:
+            self._opened_at = self._clock()
+            self._trips += 1
+        return self.state
+
+    def reset(self) -> None:
+        """Return the breaker to its initial closed state."""
+        self._consecutive_failures = 0
+        self._opened_at = None
+        self._current_cooldown = self._base_cooldown
+        self._trips = 0
+
+    def __repr__(self) -> str:
+        return (
+            f"CircuitBreaker(state={self.state.value}, "
+            f"consecutive_failures={self._consecutive_failures}, "
+            f"cooldown={self._current_cooldown}s)"
+        )
+
+
+def _validate_positive_seconds(value: float, parameter: str) -> float:
+    """
+    Validate a duration in seconds.
+
+    Raises:
+        ConfigurationError: If the value is non-numeric, non-finite, or <= 0.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ConfigurationError(
+            f"{parameter} must be numeric, got {type(value).__name__}",
+            parameter=parameter,
+            value=value,
+        )
+    numeric = float(value)
+    if not math.isfinite(numeric) or numeric <= 0.0:
+        raise ConfigurationError(
+            f"{parameter} must be a positive finite number of seconds, got {value}",
+            parameter=parameter,
+            value=value,
+        )
+    return numeric
+
+
+@dataclass(frozen=True)
+class MirrorStats:
+    """
+    Point-in-time health summary for one mirror.
+
+    Attributes:
+        mirror: Mirror identifier.
+        state: Current circuit state.
+        successes: Successful requests observed.
+        failures: Failed requests observed.
+        consecutive_failures: Failures since the last success.
+        trips: Times the breaker has opened.
+        last_throughput_bps: Throughput of the most recent successful request.
+        last_reward: Most recent reward handed to the bandit.
+        seconds_until_retry: Time before a blacklisted mirror may be retried.
+    """
+
+    mirror: str
+    state: CircuitState
+    successes: int
+    failures: int
+    consecutive_failures: int
+    trips: int
+    last_throughput_bps: float
+    last_reward: float
+    seconds_until_retry: float
+
+    @property
+    def total_requests(self) -> int:
+        """Requests observed for this mirror."""
+        return self.successes + self.failures
+
+    @property
+    def success_ratio(self) -> float:
+        """Fraction of observed requests that succeeded; 1.0 before any."""
+        if self.total_requests == 0:
+            return 1.0
+        return self.successes / self.total_requests
+
+    @property
+    def is_available(self) -> bool:
+        """Whether a request may currently be issued to this mirror."""
+        return self.state is not CircuitState.OPEN
+
+
+class MirrorHealthMonitor:
+    """
+    Turns completed requests into bandit rewards and keeps dead mirrors out.
+
+    Holds the pool-wide throughput peak that normalizes every reward, so all
+    mirrors are scored on one scale, and one circuit breaker per mirror.
+
+    Thread-safe: a download engine reports completions from many workers at
+    once, and the peak is shared mutable state.
+    """
+
+    def __init__(
+        self,
+        mirrors: Sequence[str],
+        failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
+        cooldown_seconds: float = DEFAULT_COOLDOWN_SECONDS,
+        backoff_multiplier: float = DEFAULT_BACKOFF_MULTIPLIER,
+        max_cooldown_seconds: float = DEFAULT_MAX_COOLDOWN_SECONDS,
+        peak_decay: float = DEFAULT_PEAK_DECAY,
+        min_peak_sample_bytes: int = DEFAULT_MIN_PEAK_SAMPLE_BYTES,
+        clock: Optional[Callable[[], float]] = None,
+    ) -> None:
+        self._mirrors = EXP3Bandit._validate_arms(mirrors)
+        self._peak_decay = _validate_unit_interval(
+            peak_decay, "peak_decay", allow_zero=True
+        )
+        if isinstance(min_peak_sample_bytes, bool) or not isinstance(
+            min_peak_sample_bytes, int
+        ):
+            raise ConfigurationError(
+                "min_peak_sample_bytes must be an integer, got "
+                f"{type(min_peak_sample_bytes).__name__}",
+                parameter="min_peak_sample_bytes",
+                value=min_peak_sample_bytes,
+            )
+        if min_peak_sample_bytes < 0:
+            raise ConfigurationError(
+                "min_peak_sample_bytes must be non-negative, got "
+                f"{min_peak_sample_bytes}",
+                parameter="min_peak_sample_bytes",
+                value=min_peak_sample_bytes,
+            )
+
+        self._min_peak_bytes = min_peak_sample_bytes
+        self._breakers: Dict[str, CircuitBreaker] = {
+            mirror: CircuitBreaker(
+                failure_threshold=failure_threshold,
+                cooldown_seconds=cooldown_seconds,
+                backoff_multiplier=backoff_multiplier,
+                max_cooldown_seconds=max_cooldown_seconds,
+                clock=clock,
+            )
+            for mirror in self._mirrors
+        }
+        self._successes: Dict[str, int] = {m: 0 for m in self._mirrors}
+        self._failures: Dict[str, int] = {m: 0 for m in self._mirrors}
+        self._last_throughput: Dict[str, float] = {m: 0.0 for m in self._mirrors}
+        self._last_reward: Dict[str, float] = {m: 0.0 for m in self._mirrors}
+        self._peak_bps = 0.0
+        self._lock = threading.RLock()
+
+    @property
+    def mirrors(self) -> Tuple[str, ...]:
+        """Mirrors being monitored."""
+        return self._mirrors
+
+    @property
+    def peak_throughput_bps(self) -> float:
+        """Pool-wide peak every reward is normalized against."""
+        with self._lock:
+            return self._peak_bps
+
+    def _require_mirror(self, mirror: str) -> str:
+        """Validate that a mirror belongs to the monitored pool."""
+        if mirror not in self._breakers:
+            raise ConfigurationError(
+                f"Unknown mirror {mirror!r}; known mirrors are {list(self._mirrors)}",
+                parameter="mirror",
+                value=mirror,
+            )
+        return mirror
+
+    def breaker(self, mirror: str) -> CircuitBreaker:
+        """Circuit breaker guarding one mirror."""
+        return self._breakers[self._require_mirror(mirror)]
+
+    def is_available(self, mirror: str) -> bool:
+        """Whether a request may be issued to one mirror."""
+        return self.breaker(mirror).is_available
+
+    def available_mirrors(self) -> Tuple[str, ...]:
+        """
+        Mirrors currently eligible for requests, in pool order.
+
+        Empty when every mirror is blacklisted, which the caller must handle:
+        the right response is to wait for the soonest cooldown rather than to
+        fail the transfer, since the breakers reopen on their own.
+        """
+        with self._lock:
+            return tuple(
+                mirror
+                for mirror in self._mirrors
+                if self._breakers[mirror].is_available
+            )
+
+    def seconds_until_any_available(self) -> float:
+        """
+        Time until at least one mirror may be retried; 0 if one is available now.
+
+        Lets a caller facing a fully blacklisted pool sleep exactly as long as
+        needed instead of polling.
+        """
+        with self._lock:
+            if any(b.is_available for b in self._breakers.values()):
+                return 0.0
+            return min(b.seconds_until_retry for b in self._breakers.values())
+
+    def _update_peak_locked(self, throughput: float, transferred: int) -> None:
+        """
+        Fold an observation into the pool-wide peak.
+
+        The peak decays a little on every observation so a single spuriously
+        fast sample fades rather than depressing every later reward for the rest
+        of the transfer. A genuinely fast mirror re-establishes it continuously,
+        so the decay costs nothing while the mirror keeps performing.
+        """
+        if self._peak_decay > 0.0:
+            self._peak_bps *= 1.0 - self._peak_decay
+        if transferred >= self._min_peak_bytes and throughput > self._peak_bps:
+            self._peak_bps = throughput
+
+    def record_transfer(
+        self,
+        mirror: str,
+        bytes_transferred: int,
+        duration_seconds: float,
+        success: bool = True,
+    ) -> MirrorReward:
+        """
+        Record a completed request and compute its reward.
+
+        Raises:
+            ConfigurationError: If the mirror is unknown, the byte count is
+                negative, or the duration is not a positive finite number.
+        """
+        self._require_mirror(mirror)
+        if isinstance(bytes_transferred, bool) or not isinstance(
+            bytes_transferred, int
+        ):
+            raise ConfigurationError(
+                "bytes_transferred must be an integer, got "
+                f"{type(bytes_transferred).__name__}",
+                parameter="bytes_transferred",
+                value=bytes_transferred,
+            )
+        if bytes_transferred < 0:
+            raise ConfigurationError(
+                f"bytes_transferred must be non-negative, got {bytes_transferred}",
+                parameter="bytes_transferred",
+                value=bytes_transferred,
+            )
+        duration = _validate_positive_seconds(duration_seconds, "duration_seconds")
+
+        if not success:
+            return self.record_failure(mirror)
+
+        throughput = bytes_transferred / duration
+        with self._lock:
+            self._update_peak_locked(throughput, bytes_transferred)
+            # The peak is the maximum observed, so the ratio cannot exceed 1;
+            # min() guards the case where this very sample was excluded from the
+            # peak for being too short to measure reliably.
+            reward = 0.0 if self._peak_bps <= 0.0 else min(
+                1.0, throughput / self._peak_bps
+            )
+
+            self._successes[mirror] += 1
+            self._last_throughput[mirror] = throughput
+            self._last_reward[mirror] = reward
+            state = self._breakers[mirror].record_success()
+
+            return MirrorReward(
+                mirror=mirror,
+                reward=reward,
+                throughput_bps=throughput,
+                peak_bps=self._peak_bps,
+                errored=False,
+                circuit_state=state,
+            )
+
+    def record_failure(self, mirror: str) -> MirrorReward:
+        """
+        Record a failed request, scoring zero and advancing the breaker.
+
+        Zero rather than a small value: EXP3 needs no penalty term, since
+        exp(0) leaves the weight untouched while every competing mirror climbs
+        past it.
+        """
+        self._require_mirror(mirror)
+        with self._lock:
+            self._failures[mirror] += 1
+            self._last_reward[mirror] = 0.0
+            state = self._breakers[mirror].record_failure()
+            return MirrorReward(
+                mirror=mirror,
+                reward=0.0,
+                throughput_bps=0.0,
+                peak_bps=self._peak_bps,
+                errored=True,
+                circuit_state=state,
+            )
+
+    def stats(self, mirror: str) -> MirrorStats:
+        """Health summary for one mirror."""
+        self._require_mirror(mirror)
+        with self._lock:
+            breaker = self._breakers[mirror]
+            return MirrorStats(
+                mirror=mirror,
+                state=breaker.state,
+                successes=self._successes[mirror],
+                failures=self._failures[mirror],
+                consecutive_failures=breaker.consecutive_failures,
+                trips=breaker.trips,
+                last_throughput_bps=self._last_throughput[mirror],
+                last_reward=self._last_reward[mirror],
+                seconds_until_retry=breaker.seconds_until_retry,
+            )
+
+    def all_stats(self) -> Dict[str, MirrorStats]:
+        """Health summaries for every monitored mirror."""
+        return {mirror: self.stats(mirror) for mirror in self._mirrors}
+
+    def reset(self) -> None:
+        """Clear all health history and the pool-wide peak."""
+        with self._lock:
+            for mirror in self._mirrors:
+                self._breakers[mirror].reset()
+                self._successes[mirror] = 0
+                self._failures[mirror] = 0
+                self._last_throughput[mirror] = 0.0
+                self._last_reward[mirror] = 0.0
+            self._peak_bps = 0.0
+
+    def __repr__(self) -> str:
+        return (
+            f"MirrorHealthMonitor(mirrors={len(self._mirrors)}, "
+            f"available={len(self.available_mirrors())}, "
+            f"peak={self._peak_bps:.0f}B/s)"
         )
