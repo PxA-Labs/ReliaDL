@@ -35,7 +35,11 @@ from src.algorithms.mirror_bandit import (
     ArmSelection,
     CircuitBreaker,
     CircuitState,
+    DispatchedRequest,
+    DispatchOutcome,
     EXP3Bandit,
+    MirrorDispatcher,
+    MirrorEndpoint,
     MirrorHealthMonitor,
     MirrorReward,
     MirrorStats,
@@ -98,4 +102,9 @@ __all__ = [
     "MirrorReward",
     "MirrorStats",
     "MirrorHealthMonitor",
+    # Worker request dispatch
+    "MirrorEndpoint",
+    "DispatchedRequest",
+    "DispatchOutcome",
+    "MirrorDispatcher",
 ]
