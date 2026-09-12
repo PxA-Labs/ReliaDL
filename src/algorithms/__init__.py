@@ -25,10 +25,16 @@ from src.algorithms.adaptive_chunker import (
 from src.algorithms.work_stealer import (
     DEFAULT_MIN_SPLIT_BYTES,
     DEFAULT_STRAGGLER_FACTOR,
+    BisectionTrigger,
+    RangeBisection,
     StragglerDetector,
     StragglerReason,
     StragglerVerdict,
     WorkerProgress,
+    WorkStealCoordinator,
+    WorkStealPlan,
+    bisect_range,
+    can_bisect,
 )
 from src.algorithms.task_deque import (
     DEFAULT_INITIAL_CAPACITY,
@@ -85,4 +91,10 @@ __all__ = [
     "StragglerReason",
     "StragglerVerdict",
     "StragglerDetector",
+    "BisectionTrigger",
+    "RangeBisection",
+    "WorkStealPlan",
+    "WorkStealCoordinator",
+    "bisect_range",
+    "can_bisect",
 ]
