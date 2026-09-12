@@ -22,6 +22,13 @@ from src.algorithms.adaptive_chunker import (
     align_to_power_of_two,
     is_power_of_two,
 )
+from src.algorithms.task_deque import (
+    DEFAULT_INITIAL_CAPACITY,
+    DEFAULT_STEAL_ATTEMPTS,
+    ChaseLevDeque,
+    StealResult,
+    StealStatus,
+)
 from src.algorithms.metrics_collector import (
     DEFAULT_DEVIATION_ALPHA,
     DEFAULT_FAILURE_WINDOW_SIZE,
@@ -58,4 +65,10 @@ __all__ = [
     "DynamicChunkPlanner",
     "align_to_power_of_two",
     "is_power_of_two",
+    # SR-WSRS work-stealing scheduler
+    "DEFAULT_INITIAL_CAPACITY",
+    "DEFAULT_STEAL_ATTEMPTS",
+    "ChaseLevDeque",
+    "StealResult",
+    "StealStatus",
 ]
