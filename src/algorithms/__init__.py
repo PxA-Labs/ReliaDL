@@ -22,6 +22,15 @@ from src.algorithms.adaptive_chunker import (
     align_to_power_of_two,
     is_power_of_two,
 )
+from src.algorithms.mirror_bandit import (
+    DEFAULT_EXPLORATION_RATE,
+    DEFAULT_HORIZON_ROUNDS,
+    DEFAULT_WEIGHT_DECAY,
+    ArmSelection,
+    EXP3Bandit,
+    WeightUpdate,
+    decay_for_horizon,
+)
 from src.algorithms.metrics_collector import (
     DEFAULT_DEVIATION_ALPHA,
     DEFAULT_FAILURE_WINDOW_SIZE,
@@ -58,4 +67,12 @@ __all__ = [
     "DynamicChunkPlanner",
     "align_to_power_of_two",
     "is_power_of_two",
+    # EXP3 mirror router
+    "DEFAULT_EXPLORATION_RATE",
+    "DEFAULT_WEIGHT_DECAY",
+    "DEFAULT_HORIZON_ROUNDS",
+    "ArmSelection",
+    "WeightUpdate",
+    "EXP3Bandit",
+    "decay_for_horizon",
 ]
