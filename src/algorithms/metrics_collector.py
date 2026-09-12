@@ -318,6 +318,7 @@ class NetworkStateSnapshot:
     throughput_bps: Optional[float]
     drop_probability: float
     bdp_bytes: Optional[float]
+    mean_transfer_bytes: Optional[float]
     samples: int
     failures: int
 
@@ -348,6 +349,9 @@ class NetworkMetricsCollector:
         self._throughput = EWMAEstimator(
             alpha=throughput_beta, deviation_alpha=deviation_alpha
         )
+        self._transfer_bytes = EWMAEstimator(
+            alpha=throughput_beta, deviation_alpha=deviation_alpha
+        )
         self._failures = FailureWindow(size=failure_window_size)
         self._lock = threading.RLock()
 
@@ -360,6 +364,11 @@ class NetworkMetricsCollector:
     def throughput_estimator(self) -> EWMAEstimator:
         """Underlying throughput filter, exposed for introspection."""
         return self._throughput
+
+    @property
+    def transfer_size_estimator(self) -> EWMAEstimator:
+        """Smoothed size of recent transfers, used to scale the loss model."""
+        return self._transfer_bytes
 
     @property
     def failure_window(self) -> FailureWindow:
@@ -380,6 +389,7 @@ class NetworkMetricsCollector:
                 self._rtt.update(sample.header_latency_seconds)
             if sample.success and sample.bytes_transferred > 0:
                 self._throughput.update(sample.throughput_bps)
+                self._transfer_bytes.update(float(sample.bytes_transferred))
             self._failures.record(sample.success)
 
     def record_sample(
@@ -427,6 +437,7 @@ class NetworkMetricsCollector:
                 throughput_bps=throughput,
                 drop_probability=self._failures.failure_ratio,
                 bdp_bytes=bdp,
+                mean_transfer_bytes=self._transfer_bytes.value,
                 samples=self._failures.observations,
                 failures=self._failures.failures,
             )
@@ -436,6 +447,7 @@ class NetworkMetricsCollector:
         with self._lock:
             self._rtt.reset()
             self._throughput.reset()
+            self._transfer_bytes.reset()
             self._failures.reset()
 
     def __repr__(self) -> str:
