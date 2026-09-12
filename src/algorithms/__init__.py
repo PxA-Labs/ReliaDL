@@ -18,6 +18,7 @@ from src.algorithms.adaptive_chunker import (
     MIN_CHUNK_SIZE,
     BLDCSController,
     ChunkSizingDecision,
+    DynamicChunkPlanner,
     align_to_power_of_two,
     is_power_of_two,
 )
@@ -54,6 +55,7 @@ __all__ = [
     "MAX_CHUNK_SIZE",
     "BLDCSController",
     "ChunkSizingDecision",
+    "DynamicChunkPlanner",
     "align_to_power_of_two",
     "is_power_of_two",
 ]
