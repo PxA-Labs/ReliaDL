@@ -22,6 +22,14 @@ from src.algorithms.adaptive_chunker import (
     align_to_power_of_two,
     is_power_of_two,
 )
+from src.algorithms.work_stealer import (
+    DEFAULT_MIN_SPLIT_BYTES,
+    DEFAULT_STRAGGLER_FACTOR,
+    StragglerDetector,
+    StragglerReason,
+    StragglerVerdict,
+    WorkerProgress,
+)
 from src.algorithms.task_deque import (
     DEFAULT_INITIAL_CAPACITY,
     DEFAULT_STEAL_ATTEMPTS,
@@ -71,4 +79,10 @@ __all__ = [
     "ChaseLevDeque",
     "StealResult",
     "StealStatus",
+    "DEFAULT_STRAGGLER_FACTOR",
+    "DEFAULT_MIN_SPLIT_BYTES",
+    "WorkerProgress",
+    "StragglerReason",
+    "StragglerVerdict",
+    "StragglerDetector",
 ]
