@@ -39,7 +39,7 @@ jobs:
 
       - name: Check Code Syntax & Format (Ruff)
         run: |
-          ruff check src/ tests/
+          ruff check --select=E,F src/ tests/
 
       - name: Type Checking (MyPy)
         run: |

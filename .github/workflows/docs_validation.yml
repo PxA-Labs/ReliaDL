@@ -31,18 +31,21 @@ jobs:
         run: |
           python -c "
           import os, re, sys
-          pattern = re.compile(r'\[.*?\]\((docs/[^\)]+|[^\)]+\.md)\)')
+          pattern = re.compile(r'\[.*?\]\(([^)]+)\)')
           broken = []
           for root, dirs, files in os.walk('.'):
-              if '.git' in root or '.venv' in root: continue
+              if '.git' in root or '.venv' in root or 'node_modules' in root: continue
               for f in files:
                   if f.endswith('.md'):
                       path = os.path.join(root, f)
                       with open(path, 'r', encoding='utf-8') as handle:
                           content = handle.read()
                           for match in pattern.findall(content):
-                              target = match.split('#')[0]
-                              if target and not os.path.exists(target):
+                              target = match.split('#')[0].strip()
+                              if not target or target.startswith(('http://', 'https://', 'mailto:', 'file:')):
+                                  continue
+                              rel_target = os.path.normpath(os.path.join(os.path.dirname(path), target))
+                              if not os.path.exists(rel_target) and not os.path.exists(target):
                                   broken.append((path, target))
           if broken:
               print(f'Broken markdown links found: {broken}')
