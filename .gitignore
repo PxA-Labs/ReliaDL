@@ -13,6 +13,7 @@ htmlcov/
 build/
 dist/
 *.egg-info/
+reliadl-*/
 
 # Operating System files
 .DS_Store
