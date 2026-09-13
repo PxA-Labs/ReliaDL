@@ -1,10 +1,13 @@
 # ReliaDL: Adaptive Fault-Tolerant Chunked Transfer with Homomorphic Verification and Stochastic Scheduling
 
+[![PyPI - Version](https://img.shields.io/pypi/v/reliadl.svg?logo=pypi&logoColor=white&color=blue)](https://pypi.org/project/reliadl/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/reliadl.svg)](https://pypi.org/project/reliadl/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![CodeQL Security Analysis](https://github.com/PxA-Labs/ReliaDL/actions/workflows/codeql.yml/badge.svg)](https://github.com/PxA-Labs/ReliaDL/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://img.shields.io/badge/OpenSSF_Scorecard-Passing-blue.svg)](https://securityscorecards.dev/viewer/?url=github.com/PxA-Labs/ReliaDL)
 [![OpenSSF Best Practices](https://img.shields.io/badge/OpenSSF_Best_Practices-Passing-green.svg)](https://bestpractices.coreinfrastructure.org/projects/github.com/PxA-Labs/ReliaDL)
 [![Status: Production](https://img.shields.io/badge/Status-Production-green.svg)]()
-[![Version: 1.0.0](https://img.shields.io/badge/Version-1.0.0-orange.svg)]()
+[![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-orange.svg)](https://pypi.org/project/reliadl/)
 
 ---
 
@@ -268,13 +271,71 @@ ReliaDL/
 
 ### Installation
 
+Install the published package directly from [PyPI](https://pypi.org/project/reliadl/):
+
+```bash
+pip install reliadl
+```
+
+Or install from source for development:
+
 ```bash
 git clone https://github.com/PxA-Labs/ReliaDL.git
 cd ReliaDL
-pip install -r requirements.txt
+pip install -e .
 ```
 
-### Usage
+### Python SDK Usage
+
+#### 1. Corporate Proxy Tunneling (SOCKS5 & HTTP CONNECT)
+```python
+from src.adapters.proxy_adapter import ProxyConfig, ProxyType, ProxyTunnel
+
+# Configure SOCKS5 proxy with remote DNS resolution
+proxy_cfg = ProxyConfig(
+    proxy_type=ProxyType.SOCKS5H,
+    host="proxy.corp.internal",
+    port=1080,
+    username="service_user",
+    password="secret_password"
+)
+
+tunnel = ProxyTunnel(proxy_cfg, timeout=30.0)
+connection = tunnel.open("secure.example.com", 443)
+```
+
+#### 2. Bandwidth Rate Limiter (Token Bucket)
+```python
+import asyncio
+from src.rate_limiter import TokenBucketRateLimiter
+
+async def main():
+    # Throttle download to 10 MB/s with a 2 MB burst capacity
+    limiter = TokenBucketRateLimiter(rate=10 * 1024 * 1024, capacity=2 * 1024 * 1024)
+    
+    # Acquire bandwidth pacing delay before downloading next chunk
+    delay = await limiter.acquire(64 * 1024)
+    print(f"Paced chunk delay: {delay:.4f} seconds")
+
+asyncio.run(main())
+```
+
+#### 3. Prometheus Telemetry Server
+```python
+from src.telemetry.metrics import MetricsRegistry, MetricsServer, DownloadMetrics
+
+registry = MetricsRegistry()
+metrics = DownloadMetrics(registry)
+
+# Record download telemetry
+metrics.record_chunk(bytes_count=65536, duration_seconds=0.015, mirror="us-east")
+
+# Start background Prometheus scraping HTTP server on port 9090
+with MetricsServer(registry, port=9090) as server:
+    print("Prometheus metrics server active on http://localhost:9090/metrics")
+```
+
+### Command Line Interface (CLI)
 
 ```bash
 # Execute a download with adaptive chunking and homomorphic verification
@@ -326,13 +387,16 @@ python -m src.main verify \
 
 ReliaDL adheres to the [Open Source Security Foundation (OpenSSF)](https://openssf.org/) Best Practices and Scorecard standards:
 
+[![CodeQL Security Analysis](https://github.com/PxA-Labs/ReliaDL/actions/workflows/codeql.yml/badge.svg)](https://github.com/PxA-Labs/ReliaDL/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://img.shields.io/badge/OpenSSF_Scorecard-Passing-blue.svg)](https://securityscorecards.dev/viewer/?url=github.com/PxA-Labs/ReliaDL)
 [![OpenSSF Best Practices](https://img.shields.io/badge/OpenSSF_Best_Practices-Passing-green.svg)](https://bestpractices.coreinfrastructure.org/projects/github.com/PxA-Labs/ReliaDL)
 
 * **Cryptographic Verification**: Dual-tier SHA-256 and binary Merkle Tree validation against tampered payloads.
-* **Supply Chain Security**: Pinned GitHub Actions dependencies, strict branch protection rules, and signed manifest catalogs.
+* **CodeQL Static Analysis**: Automated Python security scanning (`security-extended` & `security-and-quality`) on all pull requests and weekly schedules.
+* **Dependabot Vulnerability Management**: Automated weekly security audits and version updates for Python dependencies and GitHub Actions.
+* **PyPI Trusted Publisher (OIDC)**: Passwordless, tokenless publishing pipeline authenticated via OpenID Connect and cryptographic build attestations.
+* **Supply Chain Security**: Strict CODEOWNERS review enforcement, pinned GitHub Actions dependencies, and signed manifest catalogs.
 * **Vulnerability Disclosure**: Coordinated security response process documented in [SECURITY.md](docs/SECURITY.md).
-* **Automated CI Gates**: Automated novelty scanning, type checking, and unit test enforcement on all pull requests.
 
 ---
 
