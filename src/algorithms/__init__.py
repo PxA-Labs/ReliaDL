@@ -43,6 +43,15 @@ from src.algorithms.task_deque import (
     StealResult,
     StealStatus,
 )
+from src.algorithms.mirror_bandit import (
+    DEFAULT_EXPLORATION_RATE,
+    DEFAULT_HORIZON_ROUNDS,
+    DEFAULT_WEIGHT_DECAY,
+    ArmSelection,
+    EXP3Bandit,
+    WeightUpdate,
+    decay_for_horizon,
+)
 from src.algorithms.metrics_collector import (
     DEFAULT_DEVIATION_ALPHA,
     DEFAULT_FAILURE_WINDOW_SIZE,
@@ -97,4 +106,12 @@ __all__ = [
     "WorkStealCoordinator",
     "bisect_range",
     "can_bisect",
+    # EXP3 mirror router
+    "DEFAULT_EXPLORATION_RATE",
+    "DEFAULT_WEIGHT_DECAY",
+    "DEFAULT_HORIZON_ROUNDS",
+    "ArmSelection",
+    "WeightUpdate",
+    "EXP3Bandit",
+    "decay_for_horizon",
 ]
