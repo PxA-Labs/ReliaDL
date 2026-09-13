@@ -49,9 +49,9 @@ import bisect
 import math
 import re
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple, TypeVar, cast
 
 from src.exceptions import ConfigurationError
 
@@ -82,6 +82,11 @@ DEFAULT_THROUGHPUT_BUCKETS: Tuple[float, ...] = (
     500 * 1024.0 ** 2,
     1024.0 ** 3,
 )
+
+# Preserves a registered metric's concrete type through register(), so the
+# catalog's attributes stay Counter/Gauge/Histogram rather than collapsing to
+# the base class and losing their own methods.
+M = TypeVar("M", bound="Metric")
 
 # Metric and label names Prometheus accepts.
 _NAME_PATTERN = re.compile(r"^[a-zA-Z_:][a-zA-Z0-9_:]*$")
@@ -532,7 +537,7 @@ class MetricsRegistry:
         self._metrics: Dict[str, Metric] = {}
         self._lock = threading.Lock()
 
-    def register(self, metric: Metric) -> Metric:
+    def register(self, metric: M) -> M:
         """
         Add a metric to the registry.
 
@@ -782,12 +787,17 @@ class MetricsServer:
     @property
     def port(self) -> int:
         """Port actually bound, which differs from the request when 0 was given."""
-        return self._server.server_address[1]
+        return cast(int, self._server.server_address[1])
 
     @property
     def host(self) -> str:
-        """Address actually bound."""
-        return self._server.server_address[0]
+        """
+        Address actually bound.
+
+        ``server_address`` is typed as a union spanning every address family;
+        this server is always AF_INET, where it is a (host, port) pair.
+        """
+        return cast(str, self._server.server_address[0])
 
     @property
     def url(self) -> str:
