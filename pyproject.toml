@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reliadl"
-version = "0.2.0"
+version = "0.2.1"
 description = "Production-grade, fault-tolerant parallel file downloader with per-chunk SHA-256 cryptographic verification."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -38,12 +38,22 @@ Repository = "https://github.com/PxA-Labs/ReliaDL.git"
 Issues = "https://github.com/PxA-Labs/ReliaDL/issues"
 Discussions = "https://github.com/PxA-Labs/ReliaDL/discussions"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["src*"]
+[tool.setuptools]
+packages = [
+    "reliadl",
+    "reliadl.adapters",
+    "reliadl.algorithms",
+    "reliadl.telemetry",
+    "src",
+    "src.adapters",
+    "src.algorithms",
+    "src.telemetry"
+]
 
-# Without this the wheel carries only .py files: the default configuration is
-# dropped and load_config() silently returns nothing, and py.typed is dropped
-# so the package's type hints are invisible to a consumer's type checker.
+[tool.setuptools.package-dir]
+reliadl = "src"
+src = "src"
+
 [tool.setuptools.package-data]
 src = ["default_config.yaml", "py.typed"]
+reliadl = ["default_config.yaml", "py.typed"]
