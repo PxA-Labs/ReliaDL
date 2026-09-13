@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import re
+from importlib import resources
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -15,6 +16,13 @@ import yaml
 
 from src.exceptions import ConfigurationError
 from src.models import DownloadConfig
+
+# Filename of the defaults shipped inside the package. It lives beside this
+# module rather than in a repository-level directory because a directory
+# outside the package is not installed by a wheel, and its absence then goes
+# unnoticed: every lookup falls through to a hardcoded default and the tuned
+# values are silently discarded.
+DEFAULT_CONFIG_FILENAME = "default_config.yaml"
 
 
 # Unit multiplier lookup table for byte conversion
@@ -265,16 +273,68 @@ def apply_env_overrides(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def find_default_config_path() -> Optional[Path]:
-    """Find the default configuration file location."""
+    """
+    Find a default configuration file on the filesystem, if one is present.
+
+    Covers an operator who has dropped a defaults file next to the process, and
+    the historical repository layout. Returns None when no such file exists,
+    which is the ordinary case for an installed package — the packaged copy is
+    read through the import system instead, by ``load_default_config``.
+    """
     candidates = [
         Path("config/default_config.yaml"),
-        Path(__file__).resolve().parent.parent / "config" / "default_config.yaml",
+        Path(__file__).resolve().parent.parent / "config" / DEFAULT_CONFIG_FILENAME,
         Path("./default_config.yaml"),
     ]
     for c in candidates:
         if c.is_file():
             return c
     return None
+
+
+def load_default_config() -> dict[str, Any]:
+    """
+    Load the default configuration, from disk if present or from the package.
+
+    Read through ``importlib.resources`` rather than by building a path from
+    ``__file__``. A path assembled that way happens to work in a source
+    checkout and silently resolves to nothing once installed, since the
+    directory it points at is not part of the wheel — which is precisely how
+    this failed: ``load_config`` returned an empty dict, every caller fell back
+    to its own hardcoded value, and nothing reported a problem.
+
+    Raises:
+        ConfigurationError: If the packaged defaults cannot be found or read.
+            An installation missing them is broken, and saying so beats
+            returning an empty configuration that looks like a valid one.
+    """
+    on_disk = find_default_config_path()
+    if on_disk is not None:
+        return load_yaml_file(on_disk)
+
+    try:
+        resource = resources.files(__package__) / DEFAULT_CONFIG_FILENAME
+        text = resource.read_text(encoding="utf-8")
+    except (FileNotFoundError, ModuleNotFoundError, OSError) as error:
+        raise ConfigurationError(
+            f"Packaged default configuration {DEFAULT_CONFIG_FILENAME!r} could "
+            "not be read. The installation is incomplete: reinstall the "
+            "package, or set RELIADL_CONFIG to a configuration file",
+            parameter="default_config",
+            value=DEFAULT_CONFIG_FILENAME,
+        ) from error
+
+    parsed = yaml.safe_load(text)
+    if parsed is None:
+        return {}
+    if not isinstance(parsed, dict):
+        raise ConfigurationError(
+            "Packaged default configuration must contain a YAML mapping, got "
+            f"{type(parsed).__name__}",
+            parameter="default_config",
+            value=DEFAULT_CONFIG_FILENAME,
+        )
+    return parsed
 
 
 def find_override_config_path(explicit_path: Optional[Union[str, Path]] = None) -> Optional[Path]:
@@ -308,10 +368,8 @@ def load_config(
     """
     merged: dict[str, Any] = {}
 
-    # 1. Load default config
-    default_path = find_default_config_path()
-    if default_path:
-        merged = load_yaml_file(default_path)
+    # 1. Load default config, from disk if present or from the package.
+    merged = load_default_config()
 
     # 2. Load custom / local override
     override_path = find_override_config_path(config_path)

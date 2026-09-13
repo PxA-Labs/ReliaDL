@@ -9,14 +9,19 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from importlib import resources
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest import mock
 from unittest.mock import patch
 
 from src.config import (
     apply_env_overrides,
     deep_merge,
     format_size,
+    find_default_config_path,
     get_download_config,
+    load_default_config,
     load_yaml_file,
     parse_size,
 )
@@ -232,3 +237,119 @@ class TestGetDownloadConfig(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPackagedDefaults(unittest.TestCase):
+    """
+    The default configuration must survive installation.
+
+    It previously lived in a repository directory outside the package, so a
+    wheel did not carry it. Installed, load_config() returned an empty dict,
+    every caller fell through to its own hardcoded value, and nothing reported
+    a problem — the tuned defaults were simply gone. These tests pin the
+    packaged path, which is the one an installed user actually takes.
+    """
+
+    def test_defaults_sit_inside_the_package(self) -> None:
+        """
+        A path outside the package is not installed by a wheel.
+
+        Package data is, which is the whole reason the file moved.
+        """
+        packaged = resources.files("src") / "default_config.yaml"
+        self.assertTrue(packaged.is_file(), f"{packaged} is missing")
+
+    def test_defaults_are_readable_through_the_import_system(self) -> None:
+        """
+        Read via importlib.resources, not a path built from __file__.
+
+        A path assembled that way happens to work in a source checkout and
+        resolves to nothing once installed.
+        """
+        resource = resources.files("src") / "default_config.yaml"
+        self.assertTrue(resource.is_file())
+        self.assertIn("download:", resource.read_text(encoding="utf-8"))
+
+    def test_loaded_defaults_are_populated(self) -> None:
+        loaded = load_default_config()
+        self.assertIsInstance(loaded, dict)
+        for section in ("download", "network", "retry"):
+            self.assertIn(section, loaded, f"{section} missing from defaults")
+
+    def test_defaults_reach_the_validated_config(self) -> None:
+        """The values in the YAML, not a coincidental hardcoded fallback."""
+        loaded = load_default_config()
+        self.assertEqual(loaded["download"]["chunk_size"], "8MB")
+        self.assertEqual(loaded["download"]["max_parallel_workers"], 4)
+
+    def test_no_filesystem_copy_is_required(self) -> None:
+        """
+        The ordinary installed case: nothing on disk, everything from the
+        package. The repository now takes this path too, so the suite exercises
+        what a user gets rather than a layout only a checkout has.
+        """
+        self.assertIsNone(find_default_config_path())
+        self.assertTrue(load_default_config())
+
+    def test_missing_packaged_defaults_raise_rather_than_return_empty(self) -> None:
+        """
+        The regression this whole change is about.
+
+        An installation without its defaults is broken. Returning {} makes that
+        indistinguishable from a valid empty configuration, which is how it went
+        unnoticed; it must be loud instead.
+        """
+        with mock.patch(
+            "src.config.resources.files", side_effect=FileNotFoundError("gone")
+        ):
+            with self.assertRaises(ConfigurationError) as caught:
+                load_default_config()
+        self.assertIn("incomplete", str(caught.exception))
+
+    def test_a_non_mapping_packaged_config_is_rejected(self) -> None:
+        """A YAML list would otherwise flow onward as if it were a config."""
+
+        class _Traversable:
+            """Stands in for the packaged resource, yielding a YAML sequence."""
+
+            def __truediv__(self, _name: str) -> "_Traversable":
+                return self
+
+            def read_text(self, encoding: str = "utf-8") -> str:
+                return "- just\n- a list\n"
+
+        with mock.patch("src.config.resources.files", return_value=_Traversable()):
+            with self.assertRaises(ConfigurationError) as caught:
+                load_default_config()
+        self.assertIn("mapping", str(caught.exception))
+
+    def test_a_filesystem_copy_takes_precedence(self) -> None:
+        """An operator dropping a defaults file next to the process wins."""
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "default_config.yaml"
+            path.write_text("download:\n  max_parallel_workers: 99\n")
+            with mock.patch(
+                "src.config.find_default_config_path", return_value=path
+            ):
+                self.assertEqual(
+                    load_default_config()["download"]["max_parallel_workers"], 99
+                )
+
+    def test_py_typed_marker_ships_with_the_package(self) -> None:
+        """
+        Without PEP 561's marker a consumer's type checker ignores every hint
+        the package publishes, however thoroughly it is annotated.
+        """
+        marker = resources.files("src") / "py.typed"
+        self.assertTrue(marker.is_file(), "py.typed marker is missing")
+
+    def test_package_data_declares_both_files(self) -> None:
+        """
+        Files present in the tree are still absent from the wheel unless
+        declared, which is the failure mode this guards.
+        """
+        root = Path(__file__).resolve().parents[2]
+        manifest = (root / "pyproject.toml").read_text(encoding="utf-8")
+        self.assertIn("[tool.setuptools.package-data]", manifest)
+        self.assertIn("default_config.yaml", manifest)
+        self.assertIn("py.typed", manifest)
