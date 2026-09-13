@@ -109,6 +109,21 @@ with MetricsServer(registry, port=9090) as server:
     print("Prometheus scraper active at http://localhost:9090/metrics")
 ```
 
+### 5. Cryptographic Stream Hash Verification
+
+```python
+from src.hash_verifier import StreamingHashVerifier, constant_time_compare
+
+# Initialize streaming SHA-256 verifier
+verifier = StreamingHashVerifier(algorithm="sha256")
+verifier.update(b"chunk byte payload data...")
+
+# Compute digest and compare in constant time
+digest = verifier.hexdigest()
+is_valid = constant_time_compare(digest, "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9")
+print(f"Payload valid: {is_valid}")
+```
+
 ---
 
 ## Command Line Interface (CLI)
