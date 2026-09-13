@@ -104,6 +104,7 @@ from enum import Enum
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from src.exceptions import ConfigurationError
+from src.models import ChunkSpec
 
 # Fraction of each round's probability mass spread uniformly across mirrors.
 # Also the floor on any selection probability, and therefore the cap on the
@@ -474,22 +475,84 @@ class EXP3Bandit:
         to arrive.
         """
         with self._lock:
-            distribution = self._distribution_locked()
-            target = self._random.random()
-            cumulative = 0.0
-            chosen = self.arm_count - 1
-            for position, probability in enumerate(distribution):
-                cumulative += probability
-                if target < cumulative:
-                    chosen = position
-                    break
-            # Falling through to the last arm covers the case where accumulated
-            # floating-point error leaves the total a hair below 1.0.
-            return ArmSelection(
-                arm=self._arms[chosen],
-                probability=distribution[chosen],
-                round_index=self._rounds,
+            return self._draw_locked(list(range(self.arm_count)))
+
+    def select_from(self, candidates: Sequence[str]) -> ArmSelection:
+        """
+        Draw from a restricted set of mirrors, renormalized over the survivors.
+
+        Needed because mirrors come and go mid-transfer: a circuit-broken edge
+        must not be selected however much weight it still carries. Restricting
+        the draw rather than zeroing the weight keeps the blacklisted mirror's
+        learned standing intact for when it returns.
+
+        The reported probability is the *conditional* one, p_i / sum over the
+        candidates, because that is the distribution the draw was actually
+        made from and r/p is unbiased only against the distribution that
+        produced the action. Conditioning can only raise a probability, so the
+        importance weight stays bounded by the same M / eta as before.
+
+        This makes the algorithm EXP3 over a time-varying action set, and the
+        guarantee weakens accordingly: regret is measured against the best
+        mirror *available at the time*, not the best overall. That is the right
+        target anyway, since a blacklisted mirror is not a choice the router
+        could have made.
+
+        Raises:
+            ConfigurationError: If the candidate set is empty or names an
+                unknown mirror.
+        """
+        if not candidates:
+            raise ConfigurationError(
+                "At least one candidate mirror is required to select from; "
+                "an empty pool is a caller-side wait condition, not a draw",
+                parameter="candidates",
+                value=candidates,
             )
+        with self._lock:
+            positions: List[int] = []
+            seen = set()
+            for arm in candidates:
+                position = self._require_arm(arm)
+                if position not in seen:
+                    seen.add(position)
+                    positions.append(position)
+            return self._draw_locked(positions)
+
+    def _draw_locked(self, positions: List[int]) -> ArmSelection:
+        """
+        Sample one arm from the given positions, renormalized over them.
+
+        Shared by the full and restricted draws so there is a single sampling
+        path: the distribution is built once, conditioned on the candidate set,
+        and the probability reported is the one the draw used.
+        """
+        distribution = self._distribution_locked()
+        mass = sum(distribution[position] for position in positions)
+        if mass <= 0.0:
+            # Unreachable while the uniform floor holds, since every arm keeps
+            # at least eta/M. Falling back to a uniform draw over the
+            # candidates is the only sane response if it ever does not.
+            weights = [1.0 / len(positions)] * len(positions)
+        else:
+            weights = [distribution[position] / mass for position in positions]
+
+        target = self._random.random()
+        cumulative = 0.0
+        chosen = len(positions) - 1
+        for offset, weight in enumerate(weights):
+            cumulative += weight
+            if target < cumulative:
+                chosen = offset
+                break
+        # Falling through to the last candidate covers the case where
+        # accumulated floating-point error leaves the total a hair below 1.0.
+        position = positions[chosen]
+        return ArmSelection(
+            arm=self._arms[position],
+            probability=weights[chosen],
+            round_index=self._rounds,
+        )
 
     def update(self, selection: ArmSelection, reward: float) -> WeightUpdate:
         """
@@ -847,7 +910,7 @@ class CircuitBreaker:
         failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
         cooldown_seconds: float = DEFAULT_COOLDOWN_SECONDS,
         backoff_multiplier: float = DEFAULT_BACKOFF_MULTIPLIER,
-        max_cooldown_seconds: float = DEFAULT_MAX_COOLDOWN_SECONDS,
+        max_cooldown_seconds: Optional[float] = None,
         clock: Optional[Callable[[], float]] = None,
     ) -> None:
         if isinstance(failure_threshold, bool) or not isinstance(
@@ -869,8 +932,15 @@ class CircuitBreaker:
         self._base_cooldown = _validate_positive_seconds(
             cooldown_seconds, "cooldown_seconds"
         )
+        # Defaulting the cap relative to the base rather than to a constant:
+        # a caller who sets only a long cooldown means it, and should not have
+        # to discover a separate ceiling to make their own setting legal. An
+        # explicitly conflicting pair is still an error.
         self._max_cooldown = _validate_positive_seconds(
-            max_cooldown_seconds, "max_cooldown_seconds"
+            max(DEFAULT_MAX_COOLDOWN_SECONDS, self._base_cooldown)
+            if max_cooldown_seconds is None
+            else max_cooldown_seconds,
+            "max_cooldown_seconds",
         )
         if self._max_cooldown < self._base_cooldown:
             raise ConfigurationError(
@@ -1087,7 +1157,7 @@ class MirrorHealthMonitor:
         failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
         cooldown_seconds: float = DEFAULT_COOLDOWN_SECONDS,
         backoff_multiplier: float = DEFAULT_BACKOFF_MULTIPLIER,
-        max_cooldown_seconds: float = DEFAULT_MAX_COOLDOWN_SECONDS,
+        max_cooldown_seconds: Optional[float] = None,
         peak_decay: float = DEFAULT_PEAK_DECAY,
         min_peak_sample_bytes: int = DEFAULT_MIN_PEAK_SAMPLE_BYTES,
         clock: Optional[Callable[[], float]] = None,
@@ -1319,4 +1389,448 @@ class MirrorHealthMonitor:
             f"MirrorHealthMonitor(mirrors={len(self._mirrors)}, "
             f"available={len(self.available_mirrors())}, "
             f"peak={self._peak_bps:.0f}B/s)"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Worker request dispatch
+# ---------------------------------------------------------------------------
+#
+# The two halves above answer different questions and neither is usable alone.
+# The bandit knows which mirror deserves the next request but not which mirrors
+# are reachable; the health monitor knows which are reachable and how well they
+# performed but has no opinion on which to pick. The dispatcher joins them into
+# the loop a download worker actually runs:
+#
+#     dispatch  -> pick an available mirror, resolve its URL, hand back a handle
+#     (worker issues the range request)
+#     complete  -> score the transfer, update the weights, close the loop
+#
+# The handle is what makes the loop correct under concurrency. A worker pool has
+# many requests outstanding at once and they finish out of order, so the
+# selection probability, the mirror and the start time all have to travel with
+# the individual request rather than live in the dispatcher. Reconstructing any
+# of them at completion time would read state that a dozen other completions
+# have since moved.
+#
+# Selection is restricted to mirrors whose breaker is closed or half-open,
+# conditioned rather than filtered after the fact, so a blacklisted mirror is
+# never drawn and never has to be redrawn. An exhausted pool is not an error:
+# every breaker reopens on its own, so the dispatcher reports how long to wait
+# instead of failing a transfer that will be servable again shortly.
+
+
+@dataclass(frozen=True)
+class MirrorEndpoint:
+    """
+    One mirror in the pool: a stable identifier and the URL to fetch from.
+
+    Identifier and URL are kept separate so the bandit's learned weights survive
+    a URL change — a redirected edge or a rotated hostname is the same mirror,
+    and restarting its learning because its address moved would discard exactly
+    the evidence that makes routing work.
+
+    Attributes:
+        mirror_id: Stable identifier used as the bandit arm.
+        url: Absolute URL the file is fetched from on this mirror.
+    """
+
+    mirror_id: str
+    url: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.mirror_id, str) or not self.mirror_id:
+            raise ConfigurationError(
+                "mirror_id must be a non-empty string",
+                parameter="mirror_id",
+                value=self.mirror_id,
+            )
+        if not isinstance(self.url, str) or not self.url:
+            raise ConfigurationError(
+                f"url for mirror {self.mirror_id!r} must be a non-empty string",
+                parameter="url",
+                value=self.url,
+            )
+
+    @classmethod
+    def from_url(cls, url: str) -> "MirrorEndpoint":
+        """Build an endpoint whose identifier is the URL itself."""
+        return cls(mirror_id=url, url=url)
+
+
+@dataclass(frozen=True)
+class DispatchedRequest:
+    """
+    A handle for one in-flight range request.
+
+    Carries everything the completion needs, because by the time a reward
+    arrives the dispatcher's state has moved on. In particular it carries the
+    selection, whose probability is the one the draw was made from; recomputing
+    it at completion time would bias every estimate in flight.
+
+    Attributes:
+        request_id: Monotonic identifier, unique within a dispatcher.
+        mirror: Mirror the request was routed to.
+        url: Resolved URL for the request.
+        selection: The bandit draw that chose this mirror.
+        chunk: Range being fetched, if the caller supplied one.
+        started_at: Clock reading when the request was dispatched.
+    """
+
+    request_id: int
+    mirror: str
+    url: str
+    selection: ArmSelection
+    chunk: Optional[ChunkSpec]
+    started_at: float
+
+    @property
+    def range_header(self) -> Optional[str]:
+        """HTTP Range header for this request, if a chunk was supplied."""
+        return None if self.chunk is None else self.chunk.range_header_value
+
+    @property
+    def expected_bytes(self) -> Optional[int]:
+        """Byte count the request should return, if a chunk was supplied."""
+        return None if self.chunk is None else self.chunk.size
+
+    def __repr__(self) -> str:
+        return (
+            f"DispatchedRequest(id={self.request_id}, mirror={self.mirror!r}, "
+            f"range={self.range_header}, p={self.selection.probability:.4f})"
+        )
+
+
+@dataclass(frozen=True)
+class DispatchOutcome:
+    """
+    The closed loop for one request: what happened, and what it taught.
+
+    Attributes:
+        request: The handle that was completed.
+        reward: Normalized reward the transfer earned.
+        update: Weight update the reward produced.
+        bytes_transferred: Bytes actually received.
+        duration_seconds: Wall-clock time the request took.
+        success: Whether the request succeeded.
+    """
+
+    request: DispatchedRequest
+    reward: MirrorReward
+    update: WeightUpdate
+    bytes_transferred: int
+    duration_seconds: float
+    success: bool
+
+    @property
+    def mirror(self) -> str:
+        """Mirror the request was routed to."""
+        return self.request.mirror
+
+    @property
+    def throughput_bps(self) -> float:
+        """Observed throughput for this request."""
+        return self.reward.throughput_bps
+
+    @property
+    def circuit_state(self) -> CircuitState:
+        """Mirror's availability after this outcome."""
+        return self.reward.circuit_state
+
+    def __repr__(self) -> str:
+        return (
+            f"DispatchOutcome(mirror={self.mirror!r}, success={self.success}, "
+            f"bytes={self.bytes_transferred}, "
+            f"reward={self.reward.reward:.4f})"
+        )
+
+
+class MirrorDispatcher:
+    """
+    Routes range requests across a mirror pool and learns from the results.
+
+    Owns an EXP3 router and a health monitor, and is the only object a download
+    worker needs to talk to: ``dispatch`` to get a URL, ``complete`` or ``fail``
+    to report back.
+
+    Thread-safe. Many workers dispatch and complete concurrently, and requests
+    finish out of order.
+    """
+
+    def __init__(
+        self,
+        endpoints: Sequence[MirrorEndpoint],
+        exploration_rate: float = DEFAULT_EXPLORATION_RATE,
+        weight_decay: float = DEFAULT_WEIGHT_DECAY,
+        failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
+        cooldown_seconds: float = DEFAULT_COOLDOWN_SECONDS,
+        backoff_multiplier: float = DEFAULT_BACKOFF_MULTIPLIER,
+        max_cooldown_seconds: Optional[float] = None,
+        peak_decay: float = DEFAULT_PEAK_DECAY,
+        clock: Optional[Callable[[], float]] = None,
+        seed: Optional[int] = None,
+    ) -> None:
+        materialized = tuple(endpoints)
+        if not materialized:
+            raise ConfigurationError(
+                "At least one mirror endpoint is required",
+                parameter="endpoints",
+                value=endpoints,
+            )
+        for endpoint in materialized:
+            if not isinstance(endpoint, MirrorEndpoint):
+                raise ConfigurationError(
+                    "endpoints must contain MirrorEndpoint instances, got "
+                    f"{type(endpoint).__name__}",
+                    parameter="endpoints",
+                    value=endpoint,
+                )
+
+        mirror_ids = [endpoint.mirror_id for endpoint in materialized]
+        # Delegated so duplicate identifiers are rejected by the same check the
+        # bandit applies, rather than by a second copy that could drift from it.
+        EXP3Bandit._validate_arms(mirror_ids)
+
+        self._endpoints = {e.mirror_id: e for e in materialized}
+        self._clock = clock if clock is not None else time.monotonic
+        self._bandit = EXP3Bandit(
+            arms=mirror_ids,
+            exploration_rate=exploration_rate,
+            weight_decay=weight_decay,
+            seed=seed,
+        )
+        self._monitor = MirrorHealthMonitor(
+            mirrors=mirror_ids,
+            failure_threshold=failure_threshold,
+            cooldown_seconds=cooldown_seconds,
+            backoff_multiplier=backoff_multiplier,
+            max_cooldown_seconds=max_cooldown_seconds,
+            peak_decay=peak_decay,
+            clock=self._clock,
+        )
+        self._next_request_id = 0
+        self._in_flight: Dict[int, DispatchedRequest] = {}
+        self._dispatched = 0
+        self._completed = 0
+        self._failed = 0
+        self._lock = threading.RLock()
+
+    @property
+    def bandit(self) -> EXP3Bandit:
+        """Router choosing between mirrors."""
+        return self._bandit
+
+    @property
+    def monitor(self) -> MirrorHealthMonitor:
+        """Health monitor scoring transfers and blacklisting dead mirrors."""
+        return self._monitor
+
+    @property
+    def mirrors(self) -> Tuple[str, ...]:
+        """Mirror identifiers in the pool."""
+        return self._bandit.arms
+
+    @property
+    def in_flight(self) -> int:
+        """Requests dispatched but not yet reported."""
+        with self._lock:
+            return len(self._in_flight)
+
+    @property
+    def seconds_until_retry(self) -> float:
+        """Wait before any mirror is usable again; 0 when one is available."""
+        return self._monitor.seconds_until_any_available()
+
+    def url_for(self, mirror: str) -> str:
+        """
+        Resolve a mirror identifier to its URL.
+
+        Raises:
+            ConfigurationError: If the mirror is not in the pool.
+        """
+        endpoint = self._endpoints.get(mirror)
+        if endpoint is None:
+            raise ConfigurationError(
+                f"Unknown mirror {mirror!r}; known mirrors are {list(self.mirrors)}",
+                parameter="mirror",
+                value=mirror,
+            )
+        return endpoint.url
+
+    def available_mirrors(
+        self, exclude: Sequence[str] = ()
+    ) -> Tuple[str, ...]:
+        """
+        Mirrors eligible for a request, minus any the caller rules out.
+
+        The exclusion is for retries: a chunk whose request just failed should
+        be retried somewhere else, and offering the same mirror again would
+        usually reproduce the same failure.
+        """
+        excluded = set(exclude)
+        for mirror in excluded:
+            self.url_for(mirror)
+        return tuple(
+            mirror
+            for mirror in self._monitor.available_mirrors()
+            if mirror not in excluded
+        )
+
+    def dispatch(
+        self,
+        chunk: Optional[ChunkSpec] = None,
+        exclude: Sequence[str] = (),
+    ) -> Optional[DispatchedRequest]:
+        """
+        Choose a mirror for the next request and return a handle for it.
+
+        Returns None when no mirror is currently eligible, which is a wait
+        condition rather than a failure: every breaker reopens on its own, so
+        the caller should sleep for ``seconds_until_retry`` and try again
+        instead of abandoning the transfer. Returning None rather than raising
+        follows the planner's convention for an expected, recoverable absence.
+        """
+        with self._lock:
+            candidates = self.available_mirrors(exclude=exclude)
+            if not candidates:
+                return None
+
+            selection = self._bandit.select_from(candidates)
+            request = DispatchedRequest(
+                request_id=self._next_request_id,
+                mirror=selection.arm,
+                url=self.url_for(selection.arm),
+                selection=selection,
+                chunk=chunk,
+                started_at=self._clock(),
+            )
+            self._next_request_id += 1
+            self._dispatched += 1
+            self._in_flight[request.request_id] = request
+            return request
+
+    def _retire_locked(self, request: DispatchedRequest) -> None:
+        """
+        Remove an in-flight request, rejecting a second report for it.
+
+        A double completion would apply one observation's reward twice, which
+        is the kind of bias that produces a plausible-looking distribution
+        converging on the wrong mirror.
+        """
+        if request.request_id not in self._in_flight:
+            raise ConfigurationError(
+                f"Request {request.request_id} is not in flight; it was already "
+                "reported or did not come from this dispatcher",
+                parameter="request",
+                value=request.request_id,
+            )
+        del self._in_flight[request.request_id]
+
+    def complete(
+        self,
+        request: DispatchedRequest,
+        bytes_transferred: int,
+        duration_seconds: Optional[float] = None,
+    ) -> DispatchOutcome:
+        """
+        Report a successful transfer, scoring it and updating the weights.
+
+        The duration is taken from the dispatcher's clock unless the caller
+        supplies one, so a worker that measured the transfer itself can pass a
+        figure that excludes queueing it did not want attributed to the mirror.
+
+        Raises:
+            ConfigurationError: If the request is not in flight, the byte count
+                is invalid, or the elapsed time is not positive.
+        """
+        with self._lock:
+            self._retire_locked(request)
+            elapsed = (
+                self._elapsed_for(request)
+                if duration_seconds is None
+                else duration_seconds
+            )
+            reward = self._monitor.record_transfer(
+                request.mirror, bytes_transferred, elapsed, success=True
+            )
+            update = self._bandit.update(request.selection, reward.reward)
+            self._completed += 1
+            return DispatchOutcome(
+                request=request,
+                reward=reward,
+                update=update,
+                bytes_transferred=bytes_transferred,
+                duration_seconds=elapsed,
+                success=True,
+            )
+
+    def fail(self, request: DispatchedRequest) -> DispatchOutcome:
+        """
+        Report a failed request, scoring zero and advancing the breaker.
+
+        The bandit update is a no-op on the weights and necessarily so: the
+        reward is zero, exp(0) is 1, and no probability can change that. The
+        demotion happens the way EXP3 always demotes, by every competing mirror
+        climbing past a weight that stood still. What actually removes a failing
+        mirror is the breaker, which is why both are called here.
+
+        The update is still applied rather than skipped, because it advances the
+        round counter and records the observation with the probability the draw
+        was made from, keeping the audit trail complete for a request that did
+        happen and did cost time.
+        """
+        with self._lock:
+            self._retire_locked(request)
+            elapsed = self._elapsed_for(request)
+            reward = self._monitor.record_failure(request.mirror)
+            update = self._bandit.update(request.selection, reward.reward)
+            self._failed += 1
+            return DispatchOutcome(
+                request=request,
+                reward=reward,
+                update=update,
+                bytes_transferred=0,
+                duration_seconds=elapsed,
+                success=False,
+            )
+
+    def _elapsed_for(self, request: DispatchedRequest) -> float:
+        """
+        Time since a request was dispatched, floored above zero.
+
+        A coarse clock can report the same reading twice for a fast transfer;
+        the floor keeps the throughput division defined without inventing a
+        duration long enough to distort the reward.
+        """
+        return max(1e-9, self._clock() - request.started_at)
+
+    def abandon(self, request: DispatchedRequest) -> None:
+        """
+        Drop an in-flight request without scoring it.
+
+        For requests cancelled by the scheduler rather than by the mirror — a
+        work-stealing bisection truncating a range, or a shutdown. The mirror
+        did nothing wrong and must not be penalized for a decision taken above
+        it, so neither the weights nor the breaker are touched.
+        """
+        with self._lock:
+            self._retire_locked(request)
+
+    def stats(self) -> Dict[str, object]:
+        """Dispatch counters and the current routing distribution."""
+        with self._lock:
+            return {
+                "dispatched": self._dispatched,
+                "completed": self._completed,
+                "failed": self._failed,
+                "in_flight": len(self._in_flight),
+                "available_mirrors": list(self._monitor.available_mirrors()),
+                "probabilities": self._bandit.probabilities(),
+                "peak_throughput_bps": self._monitor.peak_throughput_bps,
+            }
+
+    def __repr__(self) -> str:
+        return (
+            f"MirrorDispatcher(mirrors={len(self._endpoints)}, "
+            f"dispatched={self._dispatched}, in_flight={len(self._in_flight)})"
         )
