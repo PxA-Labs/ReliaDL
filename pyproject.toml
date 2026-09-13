@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reliadl"
-version = "0.1.0"
+version = "0.2.0"
 description = "Production-grade, fault-tolerant parallel file downloader with per-chunk SHA-256 cryptographic verification."
 readme = "README.md"
 requires-python = ">=3.10"
