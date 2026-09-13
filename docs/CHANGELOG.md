@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Merge master into feat/prometheus-metrics
+- **readme**: Add installation verification commands (#96)
 
 ### Fixed
 - **telemetry**: Resolve Ruff lint and MyPy type-safety findings from review
