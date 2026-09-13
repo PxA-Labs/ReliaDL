@@ -47,6 +47,17 @@ from src.adapters.azure_adapter import (
     format_rfc1123,
 )
 
+from src.adapters.proxy_adapter import (
+    DEFAULT_TIMEOUT,
+    ProxyConfig,
+    ProxyTunnel,
+    ProxyType,
+    build_ssl_context,
+    encode_socks5_address,
+    open_http_connect_tunnel,
+    open_socks5_tunnel,
+)
+
 __all__ = [
     "format_range_header",
     "SignedRequest",
@@ -80,4 +91,13 @@ __all__ = [
     "AzureSharedKeySigner",
     "AzureBlobAdapter",
     "format_rfc1123",
+    # Enterprise proxy tunneling
+    "DEFAULT_TIMEOUT",
+    "ProxyType",
+    "ProxyConfig",
+    "ProxyTunnel",
+    "open_http_connect_tunnel",
+    "open_socks5_tunnel",
+    "encode_socks5_address",
+    "build_ssl_context",
 ]
