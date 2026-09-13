@@ -115,7 +115,6 @@ class TestBoundedMemoryFootprint(unittest.TestCase):
             temp_path = f.name
 
         try:
-            read_chunk_sizes: list[int] = []
             progress_calls: list[tuple[int, int]] = []
 
             def track_progress(current: int, total: int) -> None:

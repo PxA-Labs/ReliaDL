@@ -8,7 +8,6 @@ from __future__ import annotations
 import concurrent.futures
 import errno
 import hashlib
-import os
 import random
 import shutil
 import tempfile
@@ -21,7 +20,6 @@ from src.exceptions import (
     DiskFullError,
     FileHashMismatchError,
     StorageError,
-    StoragePermissionError,
 )
 from src.models import ChunkSpec
 from src.sparse_writer import (

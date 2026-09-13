@@ -15,9 +15,7 @@ import unittest
 from typing import Dict, List, Optional
 
 from src.algorithms.mirror_bandit import (
-    ArmSelection,
     CircuitState,
-    DispatchedRequest,
     DispatchOutcome,
     EXP3Bandit,
     MirrorDispatcher,

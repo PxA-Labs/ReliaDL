@@ -9,13 +9,11 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import stat
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 from src.exceptions import (
     StateCorruptedError,
-    StateError,
     StateNotFoundError,
     StorageError,
 )
@@ -23,7 +21,6 @@ from src.models import (
     ChunkState,
     ChunkStatus,
     DownloadState,
-    DownloadStatus,
 )
 
 # Owner read/write only (POSIX 0600)
@@ -133,7 +130,7 @@ class StateManager:
             # 4. Atomically replace temp file into target path
             try:
                 os.replace(tmp_path, path)
-            except OSError as e:
+            except OSError:
                 # Fall back to write-in-place if cross-device or atomic replace fails
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(json_data)

@@ -8,7 +8,6 @@ import hashlib
 import unittest
 
 from src.exceptions import (
-    ChunkHashMismatchError,
     ManifestError,
     SubBlockCorruptedError,
 )
@@ -21,8 +20,6 @@ from src.manifest import (
     SubBlockStreamValidator,
     calculate_sub_blocks,
     compute_merkle_root,
-    hash_leaf,
-    hash_parent,
 )
 
 

@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
-import shutil
 from pathlib import Path
 from typing import Callable, Optional, Union
 
@@ -19,10 +18,7 @@ from src.exceptions import (
     StorageError,
 )
 from src.models import (
-    ChunkState,
-    ChunkStatus,
     DownloadState,
-    DownloadStatus,
 )
 
 DEFAULT_ASSEMBLY_BUFFER_SIZE = 64 * 1024  # 64 KB
