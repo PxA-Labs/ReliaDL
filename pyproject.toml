@@ -31,6 +31,9 @@ dependencies = [
     "cryptography>=50.0.1"
 ]
 
+[project.scripts]
+reliadl = "src.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/PxA-Labs/ReliaDL"
 Documentation = "https://github.com/PxA-Labs/ReliaDL#readme"
