@@ -256,7 +256,7 @@ class TestPackagedDefaults(unittest.TestCase):
 
         Package data is, which is the whole reason the file moved.
         """
-        packaged = Path(config_module.__file__).resolve().parent / "default_config.yaml"
+        packaged = resources.files("src") / "default_config.yaml"
         self.assertTrue(packaged.is_file(), f"{packaged} is missing")
 
     def test_defaults_are_readable_through_the_import_system(self) -> None:
@@ -299,8 +299,8 @@ class TestPackagedDefaults(unittest.TestCase):
         indistinguishable from a valid empty configuration, which is how it went
         unnoticed; it must be loud instead.
         """
-        with mock.patch.object(
-            config_module.resources, "files", side_effect=FileNotFoundError("gone")
+        with mock.patch(
+            "src.config.resources.files", side_effect=FileNotFoundError("gone")
         ):
             with self.assertRaises(ConfigurationError) as caught:
                 load_default_config()
@@ -318,9 +318,7 @@ class TestPackagedDefaults(unittest.TestCase):
             def read_text(self, encoding: str = "utf-8") -> str:
                 return "- just\n- a list\n"
 
-        with mock.patch.object(
-            config_module.resources, "files", return_value=_Traversable()
-        ):
+        with mock.patch("src.config.resources.files", return_value=_Traversable()):
             with self.assertRaises(ConfigurationError) as caught:
                 load_default_config()
         self.assertIn("mapping", str(caught.exception))
@@ -330,8 +328,8 @@ class TestPackagedDefaults(unittest.TestCase):
         with TemporaryDirectory() as directory:
             path = Path(directory) / "default_config.yaml"
             path.write_text("download:\n  max_parallel_workers: 99\n")
-            with mock.patch.object(
-                config_module, "find_default_config_path", return_value=path
+            with mock.patch(
+                "src.config.find_default_config_path", return_value=path
             ):
                 self.assertEqual(
                     load_default_config()["download"]["max_parallel_workers"], 99
@@ -342,7 +340,7 @@ class TestPackagedDefaults(unittest.TestCase):
         Without PEP 561's marker a consumer's type checker ignores every hint
         the package publishes, however thoroughly it is annotated.
         """
-        marker = Path(config_module.__file__).resolve().parent / "py.typed"
+        marker = resources.files("src") / "py.typed"
         self.assertTrue(marker.is_file(), "py.typed marker is missing")
 
     def test_package_data_declares_both_files(self) -> None:
@@ -350,7 +348,7 @@ class TestPackagedDefaults(unittest.TestCase):
         Files present in the tree are still absent from the wheel unless
         declared, which is the failure mode this guards.
         """
-        root = Path(config_module.__file__).resolve().parent.parent
+        root = Path(__file__).resolve().parents[2]
         manifest = (root / "pyproject.toml").read_text(encoding="utf-8")
         self.assertIn("[tool.setuptools.package-data]", manifest)
         self.assertIn("default_config.yaml", manifest)
