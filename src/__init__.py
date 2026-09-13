@@ -14,6 +14,12 @@ from src.config import (
     load_yaml_file,
     parse_size,
 )
+from src.rate_limiter import (
+    DEFAULT_BURST_SECONDS,
+    BucketState,
+    TokenBucketRateLimiter,
+    UnlimitedRateLimiter,
+)
 from src.algorithms.adaptive_chunker import (
     BLDCSController,
     ChunkSizingDecision,
@@ -246,4 +252,9 @@ __all__ = [
     "DynamicChunkPlanner",
     "align_to_power_of_two",
     "is_power_of_two",
+    # Bandwidth rate limiting
+    "DEFAULT_BURST_SECONDS",
+    "BucketState",
+    "TokenBucketRateLimiter",
+    "UnlimitedRateLimiter",
 ]
