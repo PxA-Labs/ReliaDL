@@ -11,8 +11,13 @@ permissions:
 
 jobs:
   update-changelog:
-    # Do not run on commits made by github-actions[bot] or when updating CHANGELOG to prevent infinite loop
-    if: github.actor != 'github-actions[bot]' && !contains(github.event.head_commit.message, 'docs: update CHANGELOG.md')
+    # Do not run on commits made by github-actions[bot] or when updating CHANGELOG to prevent infinite loop.
+    # The expression must be a quoted or folded scalar: it contains "docs: ",
+    # and a colon-space inside a plain YAML scalar ends it, so the parser reads
+    # the remainder as a nested mapping and the whole workflow fails to load.
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      !contains(github.event.head_commit.message, 'docs: update CHANGELOG.md')
     runs-on: ubuntu-latest
 
     steps:
