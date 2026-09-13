@@ -1,5 +1,23 @@
-# Repository Code Owners
-# https://docs.github.com/en/repositories/managing-repository-files-handling-errors-and-automating-releases/about-code-owners
+# GitHub CODEOWNERS for ReliaDL (PxA-Labs/ReliaDL)
+# Defines individuals responsible for code, documentation, and infrastructure reviews.
 
-# Global Code Owners for all files in the repository
+# Global default owners for all repository assets
 * @purvanshjoshi @archittmittal
+
+# Core source implementation & algorithmic components
+/src/ @purvanshjoshi @archittmittal
+
+# GitHub Actions workflows & repository automation
+/.github/ @purvanshjoshi @archittmittal
+
+# Formal specifications & research documentation
+/docs/ @purvanshjoshi @archittmittal
+README.md @purvanshjoshi @archittmittal
+LICENSE @purvanshjoshi @archittmittal
+
+# Configuration templates & system manifests
+/config/ @purvanshjoshi @archittmittal
+requirements.txt @purvanshjoshi @archittmittal
+
+# Unit & integration test suites
+/tests/ @purvanshjoshi @archittmittal
