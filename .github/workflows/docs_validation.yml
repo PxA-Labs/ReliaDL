@@ -1,0 +1,51 @@
+name: Documentation & Markdown Link Integrity
+
+on:
+  push:
+    paths:
+      - 'docs/**'
+      - 'README.md'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'README.md'
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-docs:
+    name: Markdown Formatting & Relative Link Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify Relative Markdown Links
+        run: |
+          python -c "
+          import os, re, sys
+          pattern = re.compile(r'\[.*?\]\((docs/[^\)]+|[^\)]+\.md)\)')
+          broken = []
+          for root, dirs, files in os.walk('.'):
+              if '.git' in root or '.venv' in root: continue
+              for f in files:
+                  if f.endswith('.md'):
+                      path = os.path.join(root, f)
+                      with open(path, 'r', encoding='utf-8') as handle:
+                          content = handle.read()
+                          for match in pattern.findall(content):
+                              target = match.split('#')[0]
+                              if target and not os.path.exists(target):
+                                  broken.append((path, target))
+          if broken:
+              print(f'Broken markdown links found: {broken}')
+              sys.exit(1)
+          print('All relative markdown links verified successfully!')
+          "
