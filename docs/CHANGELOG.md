@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Custom header presets
 - S3 protocol adapter
 
+### Added
+- **telemetry**: Implement Prometheus metrics catalog and HTTP metrics server
+
+### Changed
+- Merge master into feat/prometheus-metrics
+
+### Fixed
+- **telemetry**: Resolve Ruff lint and MyPy type-safety findings from review
+- **telemetry**: Disable address reuse on Windows so a port conflict is detected
+
 ---
 
 ## [1.0.0] — 2026-08-14
