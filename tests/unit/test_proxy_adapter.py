@@ -535,6 +535,10 @@ class TestSocks5Tunnel(unittest.TestCase):
         def handle(connection: socket.socket, server: MockProxy) -> None:
             recv_exact(connection, 2)
             connection.sendall(bytes([0x04, 0x00]))
+            try:
+                connection.recv(1)
+            except OSError:
+                pass
 
         with MockProxy(handle) as proxy:
             with self.assertRaises(ProxyConnectionError) as caught:
