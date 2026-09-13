@@ -20,6 +20,14 @@ from src.rate_limiter import (
     TokenBucketRateLimiter,
     UnlimitedRateLimiter,
 )
+from src.telemetry.metrics import (
+    Counter,
+    DownloadMetrics,
+    Gauge,
+    Histogram,
+    MetricsRegistry,
+    MetricsServer,
+)
 from src.algorithms.adaptive_chunker import (
     BLDCSController,
     ChunkSizingDecision,
@@ -257,4 +265,11 @@ __all__ = [
     "BucketState",
     "TokenBucketRateLimiter",
     "UnlimitedRateLimiter",
+    # Telemetry
+    "Counter",
+    "Gauge",
+    "Histogram",
+    "MetricsRegistry",
+    "MetricsServer",
+    "DownloadMetrics",
 ]
