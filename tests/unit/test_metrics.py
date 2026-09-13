@@ -564,6 +564,13 @@ class TestMetricsServer(unittest.TestCase):
 
         A conflict discovered on the thread would be invisible: the caller would
         hold a server object that never serves.
+
+        This also pins a real cross-platform difference. HTTPServer sets
+        allow_reuse_address unconditionally, and on Windows that permits binding
+        a port another socket is actively listening on — so two exporters would
+        both bind and the OS would split scrapes between them, leaving half the
+        samples coming from a registry nobody is watching. The server disables
+        the flag there; this test is what catches it if that regresses.
         """
         with self.assertRaises(ConfigurationError):
             MetricsServer(MetricsRegistry(), host=self.server.host, port=self.server.port)

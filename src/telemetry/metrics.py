@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import bisect
 import math
+import os
 import re
 import threading
 from dataclasses import dataclass
@@ -736,6 +737,26 @@ class _MetricsHandler(BaseHTTPRequestHandler):
         """
 
 
+class _MetricsHTTPServer(ThreadingHTTPServer):
+    """
+    A threading HTTP server whose address reuse is safe on every platform.
+
+    ``HTTPServer`` sets ``allow_reuse_address`` unconditionally, and the flag
+    means different things on either side. On Unix it permits rebinding a port
+    left in TIME_WAIT, which is what makes a restart work. On Windows it permits
+    binding a port another socket is *actively listening on*, closer to Unix's
+    SO_REUSEPORT: two exporters would both bind successfully and the operating
+    system would split scrapes between them unpredictably, so half the samples
+    come from a registry the operator is not looking at.
+
+    Disabling it on Windows turns that into the bind error it should always have
+    been. The Unix behaviour is left alone, since rebinding after a clean stop
+    is deliberate and tested.
+    """
+
+    allow_reuse_address = os.name != "nt"
+
+
 class MetricsServer:
     """
     Background HTTP server exposing the registry to a scraper.
@@ -774,7 +795,7 @@ class MetricsServer:
         self._registry = registry
         handler = type("_BoundMetricsHandler", (_MetricsHandler,), {"registry": registry})
         try:
-            self._server = ThreadingHTTPServer((host, port), handler)
+            self._server = _MetricsHTTPServer((host, port), handler)
         except OSError as error:
             raise ConfigurationError(
                 f"Could not bind the metrics server to {host}:{port}: {error}",
