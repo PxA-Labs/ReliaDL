@@ -1,23 +1,263 @@
-# ReliaDL: Adaptive Fault-Tolerant Chunked Transfer with Homomorphic Verification and Stochastic Scheduling
+# ReliaDL: Production-Grade Resilient Download Engine
 
 [![PyPI - Version](https://img.shields.io/pypi/v/reliadl.svg?logo=pypi&logoColor=white&color=blue)](https://pypi.org/project/reliadl/)
-[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/reliadl.svg)](https://pypi.org/project/reliadl/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/reliadl.svg?logo=python&logoColor=white)](https://pypi.org/project/reliadl/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![CodeQL Security Analysis](https://github.com/PxA-Labs/ReliaDL/actions/workflows/codeql.yml/badge.svg)](https://github.com/PxA-Labs/ReliaDL/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://img.shields.io/badge/OpenSSF_Scorecard-Passing-blue.svg)](https://securityscorecards.dev/viewer/?url=github.com/PxA-Labs/ReliaDL)
 [![OpenSSF Best Practices](https://img.shields.io/badge/OpenSSF_Best_Practices-Passing-green.svg)](https://bestpractices.coreinfrastructure.org/projects/github.com/PxA-Labs/ReliaDL)
-[![Status: Production](https://img.shields.io/badge/Status-Production-green.svg)]()
-[![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-orange.svg)](https://pypi.org/project/reliadl/)
+
+**ReliaDL** is a production-grade, fault-tolerant parallel file download framework and high-throughput streaming engine. Designed for high-reliability data pipelines, enterprise infrastructure, and non-stationary channels, ReliaDL combines stochastic network optimization, per-chunk cryptographic integrity verification, corporate proxy tunneling, async rate limiting, and Prometheus observability.
+
+[PyPI Package](https://pypi.org/project/reliadl/) | [Documentation](docs/PROJECT_OVERVIEW.md) | [Release Notes](https://github.com/PxA-Labs/ReliaDL/releases) | [RFC Roadmap](https://github.com/PxA-Labs/ReliaDL/discussions/83) | [Issue Tracker](https://github.com/PxA-Labs/ReliaDL/issues)
 
 ---
 
-## Research Paper Reference
+## Key Capabilities
 
-> **Paper Title**: ReliaDL: Adaptive Fault-Tolerant Chunked Transfer with Homomorphic Verification and Stochastic Scheduling  
-> **Authors**: Purvansh Joshi, Archit Mittal (PxA Labs), Aviral Mittal
-> **Category**: Networked Systems, Transport Protocols, Distributed Systems Reliability  
-> **Primary Specification**: [docs/NOVEL_ALGORITHMS.md](docs/NOVEL_ALGORITHMS.md)  
-> **Empirical Benchmarks & Methodology**: [docs/PERFORMANCE.md](docs/PERFORMANCE.md)  
+| Feature | Description | Architecture Component |
+| :--- | :--- | :--- |
+| **Cryptographic Integrity** | Per-chunk SHA-256 validation, homomorphic LtHash aggregation, and 4 KB Merkle tree segment localization | `src.hash_verifier` |
+| **Proxy Tunneling** | SOCKS5 (RFC 1928 / 1929) and HTTP CONNECT corporate proxy tunneling with destination-based TLS verification | `src.adapters.proxy_adapter` |
+| **Traffic Pacing** | Token Bucket rate limiter with single-threaded reservation scheduling preventing thundering herd spikes | `src.rate_limiter` |
+| **Observability** | Native Prometheus metrics catalog exporter and structured JSON logging engine | `src.telemetry` & `src.logger` |
+| **Stochastic Pacing** | Lyapunov-based dynamic chunk sizing (AdaChunk) and restless multi-armed bandit (Whittle index) scheduling | `src.algorithms` |
+| **Cloud Adapters** | Plug-and-play streaming adapters for AWS S3, Google Cloud Storage (GCS), and Azure Blob Storage | `src.adapters` |
+
+---
+
+## Installation
+
+### From PyPI (Recommended)
+
+```bash
+pip install reliadl
+```
+
+### From Source
+
+```bash
+git clone https://github.com/PxA-Labs/ReliaDL.git
+cd ReliaDL
+pip install -e .
+```
+
+---
+
+## Quick Start & Python SDK
+
+### 1. Basic File Download & Resume Engine
+
+```python
+import asyncio
+from src.state_manager import StateManager
+
+# Initialize resilient transfer state
+state_mgr = StateManager(target_path="./downloads/large_dataset.tar.gz")
+print(f"Transfer state initialized: {state_mgr}")
+```
+
+### 2. Corporate Proxy Tunneling (SOCKS5 & HTTP CONNECT)
+
+```python
+from src.adapters.proxy_adapter import ProxyConfig, ProxyType, ProxyTunnel
+
+# Configure SOCKS5 proxy with remote DNS resolution
+proxy_config = ProxyConfig(
+    proxy_type=ProxyType.SOCKS5H,
+    host="proxy.corp.internal",
+    port=1080,
+    username="service_account",
+    password="secure_password"
+)
+
+# Open secure tunnel to destination endpoint
+tunnel = ProxyTunnel(proxy_config, timeout=30.0)
+connection = tunnel.open("secure.example.com", 443)
+```
+
+### 3. Bandwidth Rate Limiting (Token Bucket)
+
+```python
+import asyncio
+from src.rate_limiter import TokenBucketRateLimiter
+
+async def main():
+    # Throttle transfer rate to 10 MB/s with a 2 MB burst capacity
+    limiter = TokenBucketRateLimiter(rate=10 * 1024 * 1024, capacity=2 * 1024 * 1024)
+    
+    # Compute and acquire bandwidth delay before downloading next chunk
+    delay = await limiter.acquire(64 * 1024)
+    print(f"Paced chunk delay: {delay:.4f} seconds")
+
+asyncio.run(main())
+```
+
+### 4. Prometheus Telemetry Monitoring
+
+```python
+from src.telemetry.metrics import DownloadMetrics, MetricsRegistry, MetricsServer
+
+registry = MetricsRegistry()
+metrics = DownloadMetrics(registry)
+
+# Record chunk transfer telemetry
+metrics.record_chunk(bytes_count=65536, duration_seconds=0.012, mirror="us-east-1")
+
+# Launch background HTTP metrics server for Prometheus scrapers on port 9090
+with MetricsServer(registry, port=9090) as server:
+    print("Prometheus scraper active at http://localhost:9090/metrics")
+```
+
+---
+
+## Command Line Interface (CLI)
+
+ReliaDL includes a CLI for automated background file transfers and file verification:
+
+```bash
+# Execute a parallel download with adaptive chunking
+python -m src.main download \
+  --url "https://example.com/dataset.tar.gz" \
+  --output "./downloads/dataset.tar.gz" \
+  --adachunk \
+  --whittle
+
+# Resume an interrupted file transfer
+python -m src.main resume \
+  --state-file "./downloads/.reliadl/dataset.tar.gz.state"
+
+# Verify payload integrity against expected SHA-256 digest
+python -m src.main verify \
+  --file "./downloads/dataset.tar.gz" \
+  --expected-hash "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+```
+
+---
+
+## System Architecture
+
+```mermaid
+graph TB
+    subgraph ClientLayer["1. Client & Configuration Layer"]
+        CLI["CLI Interface (src.main)"]
+        CONF["Configuration Engine (src.config)"]
+        SM["ACID State Persistence (src.state_manager)"]
+    end
+
+    subgraph ControlLayer["2. Optimization & Network Layer"]
+        AC["AdaChunk Optimizer (src.algorithms.adaptive_chunker)"]
+        RL["Token Bucket Rate Limiter (src.rate_limiter)"]
+        PA["Proxy Tunnel Adapter (src.adapters.proxy_adapter)"]
+    end
+
+    subgraph TransportLayer["3. Transport Engine & Worker Pool"]
+        DE["Download Engine (src.download_engine)"]
+        W1["Worker 1 (HTTP/2 Range GET)"]
+        W2["Worker 2 (HTTP/2 Range GET)"]
+        WN["Worker K (HTTP/2 Range GET)"]
+    end
+
+    subgraph SecurityLayer["4. Cryptographic Verification & Observability"]
+        DH["Dual Hasher (src.hash_verifier)"]
+        ML["Sub-Chunk Merkle Localizer"]
+        TEL["Prometheus Metrics Server (src.telemetry)"]
+    end
+
+    subgraph StorageLayer["5. Zero-Copy Positional IO"]
+        FA["Positional Disk Writer (src.file_assembler)"]
+        OUT["Target Payload Artifact"]
+    end
+
+    CLI --> CONF
+    CLI --> DE
+    DE <--> SM
+    DE --> AC
+    DE --> RL
+    DE --> PA
+    PA --> W1 & W2 & WN
+    W1 & W2 & WN --> DH
+    DH --> TEL
+    DH --> ML
+    DH --> FA
+    FA --> OUT
+```
+
+---
+
+## Repository & Module Structure
+
+```text
+ReliaDL/
+├── README.md                          # Project documentation entry point
+├── pyproject.toml                     # PEP 517/518 PyPI build configuration
+├── LICENSE                            # Apache 2.0 License
+├── requirements.txt                   # Dependency manifests
+│
+├── .github/
+│   ├── dependabot.yml                 # Automated weekly security updates
+│   └── workflows/
+│       ├── codeql.yml                 # CodeQL static security analysis
+│       ├── ci.yml                     # Continuous integration test matrix
+│       └── publish.yml                # PyPI Trusted Publisher (OIDC) workflow
+│
+├── docs/                              # Architecture documentation & research specifications
+│   ├── NOVEL_ALGORITHMS.md            # Formal mathematical formulations & proofs
+│   ├── ARCHITECTURE.md                # System design trade-offs
+│   ├── API_REFERENCE.md               # API documentation
+│   └── OBSERVABILITY.md               # Prometheus telemetry guide
+│
+├── src/                               # Core engine modules
+│   ├── adapters/                      # Transport & proxy adapters
+│   │   ├── proxy_adapter.py           # SOCKS5 & HTTP CONNECT corporate tunneling
+│   │   ├── s3_adapter.py              # AWS S3 cloud adapter
+│   │   ├── gcs_adapter.py             # Google Cloud Storage adapter
+│   │   └── azure_adapter.py           # Azure Blob Storage adapter
+│   ├── algorithms/                    # Stochastic optimization algorithms
+│   │   ├── adaptive_chunker.py        # AdaChunk Lyapunov optimizer
+│   │   ├── metrics_collector.py       # EWMA network estimator
+│   │   ├── mirror_bandit.py           # Whittle index bandit scheduler
+│   │   └── work_stealer.py            # Dynamic work stealing queue
+│   ├── hash_verifier.py               # Streaming SHA-256 & LtHash verifier
+│   ├── rate_limiter.py                # Token bucket bandwidth rate limiter
+│   ├── telemetry/                     # Prometheus telemetry & exporter
+│   ├── state_manager.py               # Atomic state file manager
+│   ├── file_assembler.py              # Zero-copy positional disk assembler
+│   ├── config.py                      # System configuration parser
+│   ├── exceptions.py                  # Custom taxonomy exceptions
+│   └── main.py                        # Command Line Interface (CLI)
+│
+└── tests/                             # Automated test suite (860+ tests passing)
+    └── unit/                          # Component unit tests
+```
+
+---
+
+## Security, Governance & Compliance
+
+ReliaDL adheres to strict enterprise security standards and the [Open Source Security Foundation (OpenSSF)](https://openssf.org/) guidelines:
+
+* **CodeQL Static Security Analysis**: Continuous automated scanning for security vulnerabilities on every push and pull request.
+* **Dependabot Vulnerability Management**: Weekly automated dependency updates for `pip` packages and GitHub Actions.
+* **PyPI Trusted Publisher (OIDC)**: Tokenless, passwordless release publishing using OpenID Connect and GitHub Artifact Attestations.
+* **Cryptographic Supply Chain Verification**: SHA-256 digest validation and signed manifest catalogs preventing payload tampering.
+* **Vulnerability Reporting**: Coordinated security disclosure policy detailed in [SECURITY.md](docs/SECURITY.md).
+
+---
+
+## Distribution RFC & Multi-Phase Roadmap
+
+ReliaDL is executing a multi-phase distribution roadmap discussed in **[RFC Discussion #83](https://github.com/PxA-Labs/ReliaDL/discussions/83)**:
+
+- **Phase 1 (Core)**: [PyPI Package](https://pypi.org/project/reliadl/) ([Issue #84](https://github.com/PxA-Labs/ReliaDL/issues/84)) & [MkDocs Documentation](https://github.com/PxA-Labs/ReliaDL/issues/85).
+- **Phase 2 (Binaries & Containers)**: [Standalone Executables](https://github.com/PxA-Labs/ReliaDL/issues/86) & [GHCR Docker Image](https://github.com/PxA-Labs/ReliaDL/issues/87).
+- **Phase 3 (Package Managers)**: [Homebrew / WinGet / Linux Package Managers](https://github.com/PxA-Labs/ReliaDL/issues/88).
+
+---
+
+## Research Reference
+
+If you use ReliaDL in academic research or production system studies, please cite:
 
 ```bibtex
 @article{reliadl2026,
@@ -32,374 +272,6 @@
 
 ---
 
-## Overview
-
-**ReliaDL** is a research-oriented, fault-tolerant file transfer framework that formulates the reliable download problem as a constrained stochastic optimization over non-stationary channels. Unlike conventional download managers that employ static chunking and reactive retransmission (ARQ), ReliaDL introduces five novel algorithmic contributions spanning adaptive coding theory, algebraic verification, and optimal resource allocation.
-
-The central research question addressed by this work is:
-
-> *How can we minimize the expected data retransmission cost while guaranteeing byte-level integrity under non-stationary, bursty channel conditions, subject to throughput and resource constraints?*
-
-ReliaDL provides both a theoretical framework with provable performance bounds and a practical Python-based reference implementation suitable for empirical evaluation.
-
----
-
-## Novel Algorithmic Contributions
-
-1. **AdaChunk -- Lyapunov-Based Adaptive Chunk Sizing.** Formulates chunk size selection as an online stochastic optimization problem. Using the Lyapunov drift-plus-penalty framework (Neely, 2010), AdaChunk dynamically adjusts chunk boundaries based on real-time network state observations, achieving an O(1/V) optimality gap with O(V) queue backlog tradeoff.
-
-2. **LtHash -- Homomorphic Hash Aggregation.** Employs lattice-based homomorphic hashing to enable O(1) whole-file integrity verification post-assembly without re-reading the file from disk. The homomorphic property H(x || y) = H(x) + H(y) mod p allows algebraic accumulation of per-chunk hashes during download.
-
-3. **Sub-Chunk Merkle Localization.** Embeds hierarchical Merkle trees within each chunk at 4 KB segment granularity. Upon detecting a chunk-level hash mismatch, the system localizes corruption to specific 4 KB segments in O(log(B/s)) comparisons, reducing retransmission by up to 99.95%.
-
-4. **Predictive Parity Injection.** Implements proactive XOR-based forward error correction (FEC) with injection rate governed by a Gilbert-Elliott two-state Markov channel model estimator. Enables zero-RTT chunk recovery without network round trips under moderate loss conditions.
-
-5. **Whittle Index Worker Scheduling.** Models multi-source worker allocation as a restless multi-armed bandit (RMAB) problem. Employs Whittle index policies (Whittle, 1988) for asymptotically optimal stochastic scheduling of download workers across heterogeneous sources.
-
----
-
-## Key Mathematical Formulations
-
-### AdaChunk Optimization Objective
-
-```
-min  lim_{T->inf} (1/T) * sum_{t=0}^{T-1} E[C(B_t, s_t)]
-s.t. lim_{T->inf} (1/T) * sum_{t=0}^{T-1} E[G(B_t, s_t)] >= G_min
-
-Where:
-  B_t           = chunk size at time t (decision variable)
-  s_t           = (RTT_t, sigma_RTT, p_t, G_t, BDP_t)  (network state)
-  C(B, s)       = B * (1 - (1-p)^{B/MSS})              (retransmission cost)
-  G(B, s)       = B*(1-p_retry) / (T_dl + T_overhead)   (goodput)
-  Q_{t+1}       = max(Q_t - G(B_t, s_t) + G_min, 0)    (virtual queue)
-  B_t*          = argmin V*C(B,s_t) - Q_t*G(B,s_t)      (per-slot decision)
-```
-
-### LtHash Homomorphic Aggregation
-
-```
-H_file = sum_{i=0}^{k-1} H_LtHash(chunk_i) mod p
-
-Where H(x) = A * x mod p, A in Z_p^{n x m}, satisfying:
-  H(x || y) = H(x) + H(y) mod p  (homomorphic property)
-  Collision resistance reduces to SIS hardness
-```
-
-### Whittle Index Policy
-
-```
-W_i(s) = inf{ w : V_active(s, w) = V_passive(s, w) }
-
-At each slot, activate K arms with highest W_i(s_i(t))
-Achieves asymptotic optimality as N -> infinity (Weber & Weiss, 1990)
-```
-
----
-
-## System Architecture & Workflow Diagrams
-
-### Layered System Architecture
-
-```mermaid
-graph TB
-    subgraph ClientLayer["1. Client & Configuration Layer"]
-        CLI["CLI Interface (main.py)"]
-        CONF["Configuration Engine (config.py)"]
-        SM["State Manager (state_manager.py - ACID Persistence)"]
-    end
-
-    subgraph ControlLayer["2. Stochastic Control & Optimization Layer"]
-        AC["AdaChunk Optimizer<br/>(Lyapunov Drift-Plus-Penalty)"]
-        WS["Whittle Scheduler<br/>(Restless Bandit Allocation)"]
-        PE["Predictive Parity Encoder<br/>(Gilbert-Elliott Markov FEC)"]
-    end
-
-    subgraph TransportLayer["3. Concurrent Transport Engine"]
-        DE["Download Engine (download_engine.py)"]
-        W1["Worker 1 (HTTP/2 Range GET)"]
-        W2["Worker 2 (HTTP/2 Range GET)"]
-        WN["Worker K (HTTP/2 Range GET)"]
-    end
-
-    subgraph VerificationLayer["4. Verification & Localization Layer"]
-        DH["Dual Hasher<br/>(Streaming SHA-256 + LtHash)"]
-        ML["Sub-Chunk Merkle Localizer<br/>(4 KB Segment Binary Search)"]
-        HH["Homomorphic Aggregator<br/>(O(1) Whole-File Integrity Gate)"]
-    end
-
-    subgraph StorageLayer["5. Direct Zero-Copy Storage Engine"]
-        FA["Positional Disk Writer (os.pwrite)"]
-        OUT["Target Payload Artifact"]
-    end
-
-    CLI --> CONF
-    CLI --> DE
-    DE <--> SM
-    DE --> AC
-    DE --> WS
-    AC -. "Optimal Chunk Size B_t*" .-> DE
-    WS -. "Top-K Arm Assignments" .-> DE
-    DE --> PE
-    PE -. "Parity Allocation" .-> DE
-    DE --> W1 & W2 & WN
-    W1 & W2 & WN --> DH
-    DH --> ML
-    ML --> HH
-    DH --> FA
-    FA --> OUT
-    HH -. "O(1) Verification Pass" .-> SM
-```
-
-### End-to-End Download & Recovery Sequence
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant U as User / CLI
-    participant DE as Download Engine
-    participant AC as AdaChunk Optimizer
-    participant WS as Whittle Scheduler
-    participant W as Worker Pool
-    participant PE as Parity Engine
-    participant ML as Merkle Localizer
-    participant HH as LtHash Aggregator
-
-    U->>DE: Initiate Download(URL, Target)
-    DE->>AC: Sample Channel State (RTT, Loss, BDP)
-    AC-->>DE: Return Optimal Chunk Size B_t*
-    DE->>WS: Query Active Arm Rankings
-    WS-->>DE: Allocate Top-K Sources
-    DE->>PE: Compute Parity Redundancy r*(t)
-    PE-->>DE: Attach Proactive FEC Units
-    DE->>W: Dispatch Range GET [Start, End]
-    W-->>DE: Ingest Chunks + Stream Hashes
-    DE->>HH: Accumulate Homomorphic Hash H(chunk)
-    alt Chunk Hash Valid
-        DE->>DE: Commit to Disk via os.pwrite()
-    else Chunk Hash Corrupt
-        DE->>ML: Traverse Hierarchical Merkle Tree
-        ML-->>DE: Pinpoint Corrupted 4 KB Sub-Blocks
-        alt Parity Recoverable
-            DE->>PE: Execute Zero-RTT XOR Reconstruction
-            PE-->>DE: Reconstructed Valid Sub-Blocks
-        else Parity Exhausted
-            DE->>W: Issue Targeted 4 KB Range GET
-            W-->>DE: Recovered Byte Segment
-        end
-    end
-    DE->>HH: Evaluate Sum(H_i) == ExpectedRoot mod p
-    HH-->>U: Instantaneous O(1) Verification Complete
-```
-
-### Chunk Lifecycle State Machine
-
-```mermaid
-stateDiagram-v2
-    [*] --> PENDING: Range Partitioned
-    PENDING --> SCHEDULED: Whittle Index Priority
-    SCHEDULED --> DOWNLOADING: Worker Assigned
-    DOWNLOADING --> STREAM_VERIFYING: Buffer Ingestion Complete
-    
-    STREAM_VERIFYING --> HOMOMORPHIC_ACCUMULATED: SHA-256 & LtHash Pass
-    HOMOMORPHIC_ACCUMULATED --> COMMITTED: Written via os.pwrite()
-    COMMITTED --> [*]
-    
-    STREAM_VERIFYING --> MERKLE_LOCALIZING: Checksum Mismatch Detected
-    MERKLE_LOCALIZING --> PARITY_RECOVERY: 4 KB Corrupted Segments Identified
-    
-    PARITY_RECOVERY --> HOMOMORPHIC_ACCUMULATED: Zero-RTT XOR Recovery Pass
-    PARITY_RECOVERY --> TARGETED_RETRY: FEC Overhead Insufficient
-    TARGETED_RETRY --> DOWNLOADING: Re-request 4 KB Sub-Range
-```
-
----
-
-## Repository Structure
-
-```
-ReliaDL/
-├── README.md                          # Project documentation entry point
-├── LICENSE                            # Apache 2.0 License
-│
-├── docs/
-│   ├── NOVEL_ALGORITHMS.md            # Formal mathematical formulations & proofs
-│   ├── PROJECT_OVERVIEW.md            # High-level system overview
-│   ├── ARCHITECTURE.md                # Component design & architectural decisions
-│   ├── TECHNICAL_SPECIFICATION.md     # Detailed protocols, data schemas, & algorithms
-│   ├── API_REFERENCE.md               # Complete Python & CLI API specification
-│   ├── DATA_FLOW.md                   # State machine diagrams & data path sequences
-│   ├── ERROR_HANDLING.md              # Error taxonomy & recovery strategies
-│   ├── SECURITY.md                    # Security analysis & threat model
-│   ├── MANIFEST_SPECIFICATION.md      # Chunk manifest (.cgmanifest) & Merkle tree spec
-│   ├── CLOUD_ADAPTERS.md              # AWS S3, GCS, Azure Blob, & proxy protocol adapters
-│   ├── OBSERVABILITY.md               # Prometheus metrics, OpenTelemetry, & logging
-│   ├── DEPLOYMENT_GUIDE.md            # Installation, configuration, & operations
-│   ├── USER_GUIDE.md                  # Comprehensive end-user guide
-│   ├── TESTING_STRATEGY.md            # Test plans, benchmarks, & coverage targets
-│   ├── PERFORMANCE.md                 # Benchmarks, memory profile, & tuning
-│   ├── CONTRIBUTING.md                # Developer contribution standards
-│   ├── CHANGELOG.md                   # Version history
-│   ├── GLOSSARY.md                    # Terminology index
-│   ├── FAQ.md                         # Frequently asked questions
-│   └── agents.md                      # AI agents & Mem0 memory configuration
-│
-├── src/                               # System implementation
-│   ├── chunk_manager.py               # Chunk partitioning & boundary logic
-│   ├── download_engine.py             # Asynchronous download orchestrator
-│   ├── hash_verifier.py               # Streaming SHA-256 verification
-│   ├── state_manager.py               # Atomic state file manager
-│   ├── retry_handler.py               # Exponential backoff & retry policies
-│   ├── file_assembler.py              # Chunk reassembly & final integrity check
-│   ├── config.py                      # System configuration parser
-│   ├── models.py                      # Data models & schemas
-│   ├── exceptions.py                  # Custom exception definitions
-│   ├── logger.py                      # Structured JSON logging engine
-│   └── main.py                        # Command Line Interface (CLI) entry point
-│
-├── tests/                             # Test suite
-│   ├── unit/                          # Unit test modules
-│   ├── integration/                   # Integration test modules
-│   └── fixtures/                      # Mock data & server fixtures
-│
-└── config/
-    └── default_config.yaml            # Default system configuration template
-```
-
----
-
-## Quick Start
-
-### Installation
-
-Install the published package directly from [PyPI](https://pypi.org/project/reliadl/):
-
-```bash
-pip install reliadl
-```
-
-Or install from source for development:
-
-```bash
-git clone https://github.com/PxA-Labs/ReliaDL.git
-cd ReliaDL
-pip install -e .
-```
-
-### Python SDK Usage
-
-#### 1. Corporate Proxy Tunneling (SOCKS5 & HTTP CONNECT)
-```python
-from src.adapters.proxy_adapter import ProxyConfig, ProxyType, ProxyTunnel
-
-# Configure SOCKS5 proxy with remote DNS resolution
-proxy_cfg = ProxyConfig(
-    proxy_type=ProxyType.SOCKS5H,
-    host="proxy.corp.internal",
-    port=1080,
-    username="service_user",
-    password="secret_password"
-)
-
-tunnel = ProxyTunnel(proxy_cfg, timeout=30.0)
-connection = tunnel.open("secure.example.com", 443)
-```
-
-#### 2. Bandwidth Rate Limiter (Token Bucket)
-```python
-import asyncio
-from src.rate_limiter import TokenBucketRateLimiter
-
-async def main():
-    # Throttle download to 10 MB/s with a 2 MB burst capacity
-    limiter = TokenBucketRateLimiter(rate=10 * 1024 * 1024, capacity=2 * 1024 * 1024)
-    
-    # Acquire bandwidth pacing delay before downloading next chunk
-    delay = await limiter.acquire(64 * 1024)
-    print(f"Paced chunk delay: {delay:.4f} seconds")
-
-asyncio.run(main())
-```
-
-#### 3. Prometheus Telemetry Server
-```python
-from src.telemetry.metrics import MetricsRegistry, MetricsServer, DownloadMetrics
-
-registry = MetricsRegistry()
-metrics = DownloadMetrics(registry)
-
-# Record download telemetry
-metrics.record_chunk(bytes_count=65536, duration_seconds=0.015, mirror="us-east")
-
-# Start background Prometheus scraping HTTP server on port 9090
-with MetricsServer(registry, port=9090) as server:
-    print("Prometheus metrics server active on http://localhost:9090/metrics")
-```
-
-### Command Line Interface (CLI)
-
-```bash
-# Execute a download with adaptive chunking and homomorphic verification
-python -m src.main download \
-  --url "https://example.com/dataset.tar.gz" \
-  --output "./downloads/dataset.tar.gz" \
-  --adachunk \
-  --whittle
-
-# Resume an interrupted transfer
-python -m src.main resume \
-  --state-file "./downloads/.reliadl/dataset.tar.gz.state"
-
-# Verify file integrity
-python -m src.main verify \
-  --file "./downloads/dataset.tar.gz" \
-  --expected-hash "sha256:abcdef1234567890..."
-```
-
----
-
-## Documentation Index
-
-| Document | Audience | Description |
-|---|---|---|
-| [Novel Algorithms](docs/NOVEL_ALGORITHMS.md) | Systems Researchers & Algorithm Engineers | Mathematical formulations, Lyapunov optimization, LtHash, & proofs |
-| [Project Overview](docs/PROJECT_OVERVIEW.md) | Technical & Non-Technical | Business context, problem statement, and scope |
-| [Architecture](docs/ARCHITECTURE.md) | System Architects & Engineers | Structural design, component responsibilities, and trade-offs |
-| [Technical Specification](docs/TECHNICAL_SPECIFICATION.md) | Software Engineers | In-depth protocols, schemas, and mathematical specifications |
-| [API Reference](docs/API_REFERENCE.md) | Integration Developers | Full documentation of Python SDK and CLI commands |
-| [Data Flow](docs/DATA_FLOW.md) | Core Maintainers | State transition models and execution sequence diagrams |
-| [Error Handling](docs/ERROR_HANDLING.md) | Systems & Reliability Engineers | Comprehensive exception taxonomy and fault escalation rules |
-| [Security](docs/SECURITY.md) | Security Analysts & Auditors | Threat model, cryptographic assurances, and mitigations |
-| [Manifest Specification](docs/MANIFEST_SPECIFICATION.md) | Systems Engineers & Auditors | Formal specification of `.cgmanifest`, Merkle trees, and signed catalogs |
-| [Cloud & Protocol Adapters](docs/CLOUD_ADAPTERS.md) | Cloud Architects & DevOps | AWS S3, GCS, Azure Blob, SOCKS5/HTTP proxies, and HTTP/3 QUIC |
-| [Observability & Monitoring](docs/OBSERVABILITY.md) | SREs & Platform Engineers | Prometheus metrics catalog, OpenTelemetry tracing, and Grafana alerting |
-| [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) | DevOps & SREs | Operations, environment setup, and monitoring integration |
-| [User Guide](docs/USER_GUIDE.md) | End Users & Automation Engineers | Detailed command syntax and workflow examples |
-| [Testing Strategy](docs/TESTING_STRATEGY.md) | QA & Test Engineers | Test suite structure, fault injection, and coverage goals |
-| [Performance](docs/PERFORMANCE.md) | Performance Engineers | Benchmarks, memory profile, and tuning strategies |
-| [Contributing](docs/CONTRIBUTING.md) | Contributors | Development setup, code guidelines, and pull request procedures |
-| [AI Agents & Memory](docs/agents.md) | AI Engineers & Agent Developers | Mem0 memory configuration, persistent context, and agent workflows |
-| [Glossary](docs/GLOSSARY.md) | All Readers | Index of technical terms and acronyms |
-| [FAQ](docs/FAQ.md) | All Readers | Answers to common technical and operational questions |
-
----
-
-## Security & OpenSSF Compliance
-
-ReliaDL adheres to the [Open Source Security Foundation (OpenSSF)](https://openssf.org/) Best Practices and Scorecard standards:
-
-[![CodeQL Security Analysis](https://github.com/PxA-Labs/ReliaDL/actions/workflows/codeql.yml/badge.svg)](https://github.com/PxA-Labs/ReliaDL/actions/workflows/codeql.yml)
-[![OpenSSF Scorecard](https://img.shields.io/badge/OpenSSF_Scorecard-Passing-blue.svg)](https://securityscorecards.dev/viewer/?url=github.com/PxA-Labs/ReliaDL)
-[![OpenSSF Best Practices](https://img.shields.io/badge/OpenSSF_Best_Practices-Passing-green.svg)](https://bestpractices.coreinfrastructure.org/projects/github.com/PxA-Labs/ReliaDL)
-
-* **Cryptographic Verification**: Dual-tier SHA-256 and binary Merkle Tree validation against tampered payloads.
-* **CodeQL Static Analysis**: Automated Python security scanning (`security-extended` & `security-and-quality`) on all pull requests and weekly schedules.
-* **Dependabot Vulnerability Management**: Automated weekly security audits and version updates for Python dependencies and GitHub Actions.
-* **PyPI Trusted Publisher (OIDC)**: Passwordless, tokenless publishing pipeline authenticated via OpenID Connect and cryptographic build attestations.
-* **Supply Chain Security**: Strict CODEOWNERS review enforcement, pinned GitHub Actions dependencies, and signed manifest catalogs.
-* **Vulnerability Disclosure**: Coordinated security response process documented in [SECURITY.md](docs/SECURITY.md).
-
----
-
 ## License
 
-This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for the complete terms.
+ReliaDL is open-source software licensed under the **[Apache License 2.0](LICENSE)**.
