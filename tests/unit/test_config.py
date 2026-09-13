@@ -15,8 +15,6 @@ from tempfile import TemporaryDirectory
 from unittest import mock
 from unittest.mock import patch
 
-import src.config as config_module
-
 from src.config import (
     apply_env_overrides,
     deep_merge,
