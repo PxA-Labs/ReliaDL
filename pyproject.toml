@@ -41,3 +41,9 @@ Discussions = "https://github.com/PxA-Labs/ReliaDL/discussions"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*"]
+
+# Without this the wheel carries only .py files: the default configuration is
+# dropped and load_config() silently returns nothing, and py.typed is dropped
+# so the package's type hints are invisible to a consumer's type checker.
+[tool.setuptools.package-data]
+src = ["default_config.yaml", "py.typed"]
