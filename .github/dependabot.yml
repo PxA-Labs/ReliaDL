@@ -1,0 +1,44 @@
+# Dependabot Configuration for ReliaDL (PxA-Labs/ReliaDL)
+# Automatically updates Python dependencies and GitHub Actions workflows
+
+version: 2
+updates:
+  # Maintain Python pip dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "purvanshjoshi"
+      - "archittmittal"
+    assignees:
+      - "purvanshjoshi"
+      - "archittmittal"
+    target-branch: "master"
+    labels:
+      - "dependencies"
+      - "python"
+
+  # Maintain GitHub Actions workflow dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "purvanshjoshi"
+      - "archittmittal"
+    assignees:
+      - "purvanshjoshi"
+      - "archittmittal"
+    target-branch: "master"
+    labels:
+      - "dependencies"
+      - "ci-cd"

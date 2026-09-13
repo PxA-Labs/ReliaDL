@@ -25,8 +25,8 @@ that shares its author's misunderstandings.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Dict, Mapping, Optional, Tuple
+from dataclasses import dataclass
+from typing import Mapping, Optional, Tuple
 
 from src.exceptions import ConfigurationError
 

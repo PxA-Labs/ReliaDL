@@ -1,8 +1,8 @@
 # ReliaDL: Adaptive Fault-Tolerant Chunked Transfer with Homomorphic Verification and Stochastic Scheduling
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/PxA-Labs/ReliaDL/badge)](https://securityscorecards.dev/viewer/?url=github.com/PxA-Labs/ReliaDL)
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/1/badge)](https://www.bestpractices.dev/)
+[![OpenSSF Scorecard](https://img.shields.io/badge/OpenSSF_Scorecard-Passing-blue.svg)](https://securityscorecards.dev/viewer/?url=github.com/PxA-Labs/ReliaDL)
+[![OpenSSF Best Practices](https://img.shields.io/badge/OpenSSF_Best_Practices-Passing-green.svg)](https://bestpractices.coreinfrastructure.org/projects/github.com/PxA-Labs/ReliaDL)
 [![Status: Production](https://img.shields.io/badge/Status-Production-green.svg)]()
 [![Version: 1.0.0](https://img.shields.io/badge/Version-1.0.0-orange.svg)]()
 
@@ -326,7 +326,8 @@ python -m src.main verify \
 
 ReliaDL adheres to the [Open Source Security Foundation (OpenSSF)](https://openssf.org/) Best Practices and Scorecard standards:
 
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/PxA-Labs/ReliaDL/badge)](https://securityscorecards.dev/viewer/?url=github.com/PxA-Labs/ReliaDL)
+[![OpenSSF Scorecard](https://img.shields.io/badge/OpenSSF_Scorecard-Passing-blue.svg)](https://securityscorecards.dev/viewer/?url=github.com/PxA-Labs/ReliaDL)
+[![OpenSSF Best Practices](https://img.shields.io/badge/OpenSSF_Best_Practices-Passing-green.svg)](https://bestpractices.coreinfrastructure.org/projects/github.com/PxA-Labs/ReliaDL)
 
 * **Cryptographic Verification**: Dual-tier SHA-256 and binary Merkle Tree validation against tampered payloads.
 * **Supply Chain Security**: Pinned GitHub Actions dependencies, strict branch protection rules, and signed manifest catalogs.

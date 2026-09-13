@@ -14,6 +14,12 @@ from src.config import (
     load_yaml_file,
     parse_size,
 )
+from src.rate_limiter import (
+    DEFAULT_BURST_SECONDS,
+    BucketState,
+    TokenBucketRateLimiter,
+    UnlimitedRateLimiter,
+)
 from src.telemetry.metrics import (
     Counter,
     DownloadMetrics,
@@ -254,6 +260,11 @@ __all__ = [
     "DynamicChunkPlanner",
     "align_to_power_of_two",
     "is_power_of_two",
+    # Bandwidth rate limiting
+    "DEFAULT_BURST_SECONDS",
+    "BucketState",
+    "TokenBucketRateLimiter",
+    "UnlimitedRateLimiter",
     # Telemetry
     "Counter",
     "Gauge",

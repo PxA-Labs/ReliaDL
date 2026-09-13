@@ -16,7 +16,6 @@ from typing import BinaryIO, Callable, Iterable, Optional, Union
 from src.exceptions import (
     ConfigurationError,
     FileHashMismatchError,
-    ReliaDLError,
     StorageError,
 )
 from src.models import VerificationResult

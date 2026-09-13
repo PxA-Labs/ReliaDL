@@ -5,7 +5,6 @@ Verifies immutability, data validation, serialization, and lifecycle states.
 
 from __future__ import annotations
 
-import json
 import unittest
 from dataclasses import FrozenInstanceError
 from datetime import datetime, timezone
@@ -374,7 +373,7 @@ class TestResultAndReportModels(unittest.TestCase):
             download_id="dl-res-01",
         )
         self.assertTrue(res.is_verified)
-        self.assertEqual(res.to_dict()["output_path"], "/data/out.bin")
+        self.assertEqual(res.to_dict()["output_path"], str(Path("/data/out.bin")))
         with self.assertRaises(FrozenInstanceError):
             res.is_verified = False  # type: ignore[misc]
 
@@ -389,7 +388,7 @@ class TestResultAndReportModels(unittest.TestCase):
             algorithm="sha256",
         )
         self.assertTrue(v.is_valid)
-        self.assertEqual(v.to_dict()["file_path"], "/data/target.iso")
+        self.assertEqual(v.to_dict()["file_path"], str(Path("/data/target.iso")))
         with self.assertRaises(FrozenInstanceError):
             v.is_valid = False  # type: ignore[misc]
 

@@ -5,9 +5,7 @@ Verifies JSON formatting, log levels, file emission, and sensitive credential sc
 
 from __future__ import annotations
 
-import io
 import json
-import logging
 import tempfile
 import unittest
 from pathlib import Path
@@ -109,6 +107,7 @@ class TestStructuredLogger(unittest.TestCase):
             self.assertNotIn("mypassword", json.dumps(last_record))
             self.assertIn("[REDACTED]:[REDACTED]@", last_record.get("proxy_url", ""))
         finally:
+            configure_logger(level="INFO")
             Path(log_file).unlink(missing_ok=True)
 
     def test_text_formatting(self) -> None:
@@ -126,6 +125,7 @@ class TestStructuredLogger(unittest.TestCase):
             self.assertIn("cli_status_update", content)
             self.assertIn("progress_pct", content)
         finally:
+            configure_logger(level="INFO")
             Path(log_file).unlink(missing_ok=True)
 
     def test_log_level_filtering(self) -> None:
@@ -147,6 +147,7 @@ class TestStructuredLogger(unittest.TestCase):
             self.assertNotIn("info_event_should_be_filtered", content)
             self.assertIn("warning_event_emitted", content)
         finally:
+            configure_logger(level="INFO")
             Path(log_file).unlink(missing_ok=True)
 
 

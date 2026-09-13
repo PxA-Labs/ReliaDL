@@ -82,10 +82,11 @@ class TestAtomicSaveAndPermissions(unittest.TestCase):
         state_path = self.manager.save(state)
         self.assertTrue(state_path.is_file())
 
-        # Check POSIX file mode 0600 (owner read/write only)
-        file_stat = os.stat(state_path)
-        mode = stat.S_IMODE(file_stat.st_mode)
-        self.assertEqual(mode, STATE_FILE_PERMISSIONS)
+        # Check POSIX file mode 0600 (owner read/write only) on POSIX platforms
+        if os.name != "nt":
+            file_stat = os.stat(state_path)
+            mode = stat.S_IMODE(file_stat.st_mode)
+            self.assertEqual(mode, STATE_FILE_PERMISSIONS)
 
         # Ensure temporary files were cleaned up
         tmp_files = list(state_path.parent.glob("*.tmp*"))

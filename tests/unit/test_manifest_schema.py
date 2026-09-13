@@ -12,13 +12,6 @@ from pathlib import Path
 
 from src.exceptions import ManifestError, ManifestFormatError
 from src.manifest import (
-    ArtifactMetadata,
-    ChunkingTopology,
-    ChunkManifest,
-    ManifestChunk,
-    ManifestGenerator,
-    ManifestSignature,
-    MirrorSpec,
     dump_manifest,
     load_manifest,
     parse_manifest_json,

@@ -8,7 +8,6 @@ resolution including the DNS-compatibility fallback, and presigned pass-through.
 
 from __future__ import annotations
 
-import configparser
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
