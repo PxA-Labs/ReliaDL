@@ -1,5 +1,5 @@
 pydantic>=2.13.5
 PyYAML>=6.0.3
-structlog>=23.0.0
+structlog>=26.1.0
 jsonschema>=4.26.0
 cryptography>=50.0.1
