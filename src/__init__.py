@@ -14,6 +14,14 @@ from src.config import (
     load_yaml_file,
     parse_size,
 )
+from src.telemetry.metrics import (
+    Counter,
+    DownloadMetrics,
+    Gauge,
+    Histogram,
+    MetricsRegistry,
+    MetricsServer,
+)
 from src.algorithms.adaptive_chunker import (
     BLDCSController,
     ChunkSizingDecision,
@@ -246,4 +254,11 @@ __all__ = [
     "DynamicChunkPlanner",
     "align_to_power_of_two",
     "is_power_of_two",
+    # Telemetry
+    "Counter",
+    "Gauge",
+    "Histogram",
+    "MetricsRegistry",
+    "MetricsServer",
+    "DownloadMetrics",
 ]
