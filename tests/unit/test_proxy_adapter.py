@@ -678,7 +678,6 @@ class TestProxyTunnel(unittest.TestCase):
 
         def spying_build(ca_bundle=None, verify=True):
             context = real_build(ca_bundle, verify)
-            real_wrap = context.wrap_socket
 
             def wrap(sock, server_hostname=None, **kwargs):
                 observed["server_hostname"] = server_hostname
