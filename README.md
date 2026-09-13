@@ -42,6 +42,22 @@ cd ReliaDL
 pip install -e .
 ```
 
+### Verification
+
+To verify that ReliaDL is correctly installed and ready to use, run these quick test commands in your terminal:
+
+```bash
+# 1. Verify package import and installation path
+python -c "import reliadl; print('ReliaDL successfully imported from:', reliadl.__file__)"
+
+# 2. Inspect package version and metadata
+pip show reliadl
+
+# 3. Test core component initialization
+python -c "from reliadl import DownloadConfig; config = DownloadConfig(); print('Config initialized successfully!')"
+```
+
+
 ---
 
 ## Quick Start & Python SDK
