@@ -4,7 +4,6 @@ Unit tests for cryptographic manifest signing and verification (Ed25519 and RSA-
 
 from __future__ import annotations
 
-import json
 import unittest
 
 from src.exceptions import ManifestSignatureMismatchError

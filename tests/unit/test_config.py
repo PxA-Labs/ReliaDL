@@ -17,7 +17,6 @@ from src.config import (
     deep_merge,
     format_size,
     get_download_config,
-    load_config,
     load_yaml_file,
     parse_size,
 )

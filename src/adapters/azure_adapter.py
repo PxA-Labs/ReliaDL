@@ -52,7 +52,7 @@ import hmac
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Callable, Dict, Mapping, Optional, Sequence, Tuple
+from typing import Callable, Dict, Mapping, Optional, Tuple
 from urllib.parse import parse_qs, quote, urlsplit
 
 from src.adapters.base import (

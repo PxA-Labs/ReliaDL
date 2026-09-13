@@ -5,7 +5,6 @@ Verifies immutability, data validation, serialization, and lifecycle states.
 
 from __future__ import annotations
 
-import json
 import unittest
 from dataclasses import FrozenInstanceError
 from datetime import datetime, timezone

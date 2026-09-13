@@ -5,9 +5,7 @@ Verifies JSON formatting, log levels, file emission, and sensitive credential sc
 
 from __future__ import annotations
 
-import io
 import json
-import logging
 import tempfile
 import unittest
 from pathlib import Path
