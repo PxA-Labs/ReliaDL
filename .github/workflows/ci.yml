@@ -39,7 +39,7 @@ jobs:
 
       - name: Check Code Syntax & Format (Ruff)
         run: |
-          ruff check --ignore=E501 src/ tests/
+          ruff check --select=E,F --ignore=E501 src/ tests/
 
       - name: Type Checking (MyPy)
         run: |
