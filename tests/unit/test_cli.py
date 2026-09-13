@@ -2,7 +2,6 @@
 Unit tests for ReliaDL Command Line Interface (CLI) subcommands.
 """
 
-import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,16 +12,14 @@ from src.cli import (
     main,
     run_benchmark,
     run_doctor,
-    run_download,
     run_hash_tree,
     run_inspect_state,
     run_probe,
-    run_resume,
     run_top,
     run_verify,
 )
 from src.hash_verifier import compute_file_hash
-from src.manifest import BinaryMerkleTree, ChunkManifest, ManifestChunk, ArtifactMetadata, ChunkingTopology
+from src.manifest import ChunkManifest, ManifestChunk, ArtifactMetadata, ChunkingTopology
 
 
 class TestCLISubcommands(unittest.TestCase):

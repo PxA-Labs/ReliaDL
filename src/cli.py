@@ -8,9 +8,7 @@ telemetry stats monitoring, and high-throughput network benchmarking.
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
-import math
 import os
 import platform
 import sys
@@ -18,20 +16,14 @@ import time
 import urllib.request
 import urllib.error
 from pathlib import Path
-from typing import Any, Optional, Sequence
+from typing import Optional, Sequence
 
-from src.adapters.proxy_adapter import ProxyConfig, ProxyType, ProxyTunnel
-from src.algorithms.adaptive_chunker import DynamicChunkPlanner
-from src.config import DownloadConfig, format_size, get_download_config, parse_size
-from src.exceptions import ConfigurationError, ReliaDLError
-from src.file_assembler import FileAssembler
-from src.hash_verifier import StreamingHashVerifier, compute_file_hash, constant_time_compare, verify_file_hash
+from src.adapters.proxy_adapter import ProxyConfig, ProxyTunnel
+from src.config import format_size
+from src.hash_verifier import StreamingHashVerifier, compute_file_hash, constant_time_compare
 from src.logger import configure_logger, get_logger
-from src.manifest import BinaryMerkleTree, ChunkManifest, compute_merkle_root, load_manifest
-from src.models import ChunkSpec, DownloadStatus
-from src.rate_limiter import TokenBucketRateLimiter
+from src.manifest import BinaryMerkleTree, compute_merkle_root, load_manifest
 from src.state_manager import StateManager
-from src.telemetry.metrics import DownloadMetrics, MetricsRegistry
 
 logger = get_logger("reliadl.cli")
 
@@ -167,7 +159,7 @@ def run_probe(args: argparse.Namespace) -> int:
             pass_count += 1
 
             if accept_ranges:
-                print(f"[PASS] Byte-Range Requests Supported (Accept-Ranges: bytes)")
+                print("[PASS] Byte-Range Requests Supported (Accept-Ranges: bytes)")
                 pass_count += 1
             else:
                 print(f"[WARN] Byte-Range Requests Not Declared (Accept-Ranges: {resp.headers.get('Accept-Ranges')})")
@@ -189,7 +181,7 @@ def run_probe(args: argparse.Namespace) -> int:
             port = parsed.port or (443 if parsed.scheme == "https" else 80)
             conn = tunnel.open(parsed.hostname or "localhost", port)
             conn.close()
-            print(f"[PASS] Corporate Proxy Tunnel Connection Established Successfully")
+            print("[PASS] Corporate Proxy Tunnel Connection Established Successfully")
             pass_count += 1
         except Exception as e:
             print(f"[FAIL] Proxy Tunnel Error: {e}")
@@ -231,7 +223,7 @@ def run_inspect_state(args: argparse.Namespace) -> int:
                 return 0
 
             print("======================================================================")
-            print(f" RELIADL CHUNKGUARD MANIFEST DIAGNOSTIC AUDIT")
+            print(" RELIADL CHUNKGUARD MANIFEST DIAGNOSTIC AUDIT")
             print("======================================================================")
             print(f"File Path        : {target_path}")
             print(f"Manifest Version : {manifest.manifest_version}")
@@ -384,7 +376,7 @@ def run_top(args: argparse.Namespace) -> int:
             req = urllib.request.Request(url, headers={"User-Agent": f"ReliaDL-Top/{__version__}"})
             with urllib.request.urlopen(req, timeout=3.0) as resp:
                 content = resp.read().decode("utf-8", errors="ignore")
-                lines = [l for l in content.splitlines() if not l.startswith("#") and l.strip()]
+                lines = [line for line in content.splitlines() if not line.startswith("#") and line.strip()]
 
                 print(f"[{time.strftime('%H:%M:%S')}] Active Telemetry Metrics Snapshot ({len(lines)} metrics):")
                 print("----------------------------------------------------------------------")
@@ -584,7 +576,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_insp.add_argument("--json", action="store_true", help="Output diagnostic report in JSON format")
 
     # 4. doctor
-    p_doc = subparsers.add_parser("doctor", help="Audit local system environment and storage capabilities")
+    subparsers.add_parser("doctor", help="Audit local system environment and storage capabilities")
 
     # 5. top / stats
     p_top = subparsers.add_parser("top", help="Real-time terminal UI monitoring dashboard for telemetry")
