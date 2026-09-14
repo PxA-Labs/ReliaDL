@@ -144,24 +144,33 @@ print(f"Payload valid: {is_valid}")
 
 ## Command Line Interface (CLI)
 
-ReliaDL includes a CLI for automated background file transfers and file verification:
+ReliaDL includes a production CLI (`reliadl` or `python -m src.main`) for automated transfers, system diagnostics, pre-flight probing, telemetry monitoring, and Merkle tree auditing:
 
 ```bash
-# Execute a parallel download with adaptive chunking
-python -m src.main download \
-  --url "https://example.com/dataset.tar.gz" \
-  --output "./downloads/dataset.tar.gz" \
-  --adachunk \
-  --whittle
+# 1. Parallel File Download
+reliadl download --url "https://example.com/dataset.tar.gz" --output "./downloads/dataset.tar.gz" --adachunk --whittle
 
-# Resume an interrupted file transfer
-python -m src.main resume \
-  --state-file "./downloads/.reliadl/dataset.tar.gz.state"
+# 2. High-Throughput Network & Crypto Benchmark
+reliadl benchmark --duration 10s --block-size 64
 
-# Verify payload integrity against expected SHA-256 digest
-python -m src.main verify \
-  --file "./downloads/dataset.tar.gz" \
-  --expected-hash "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+# 3. Pre-Flight Infrastructure Diagnostic Probe
+reliadl probe --url "https://cdn.example.com/data.tar.gz" --proxy "socks5h://proxy.corp:1080"
+
+# 4. State Checkpoint & Manifest Diagnostic Inspection
+reliadl inspect-state --state-file "./downloads/.reliadl/dataset.tar.gz.state" --json
+
+# 5. System Environment & Storage Diagnostic Doctor
+reliadl doctor
+
+# 6. Real-Time Telemetry UI Monitoring Dashboard
+reliadl top --metrics-port 9090
+
+# 7. Segment Merkle Tree Cryptographic Audit
+reliadl hash-tree --file "./downloads/dataset.tar.gz" --merkle-root "a3f8..."
+
+# 8. Verification & Resumption
+reliadl verify --file "./downloads/dataset.tar.gz" --expected-hash "sha256:e3b0c442..."
+reliadl resume --state-file "./downloads/.reliadl/dataset.tar.gz.state"
 ```
 
 ---
