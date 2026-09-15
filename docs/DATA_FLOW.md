@@ -204,8 +204,8 @@ Download Initialized (--direct-write)
        ▼
 [ Verify Cryptographic Signature (Ed25519) ]
        │
-       ├── ❌ Signature Invalid ──▶ Abort (Untrusted Manifest)
-       └── ✅ Signature Valid   ──▶ Load pre-authenticated chunk hashes & mirrors
+       ├── [FAIL] Signature Invalid ──▶ Abort (Untrusted Manifest)
+       └── [PASS] Signature Valid   ──▶ Load pre-authenticated chunk hashes & mirrors
                                           │
                                           ▼
                              [ Concurrent Range GETs ]

@@ -9,23 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Planned
-- Bandwidth throttling support
-- HTTP proxy support
-- Custom header presets
-- S3 protocol adapter
+---
+
+## [0.3.0] — 2026-09-15
 
 ### Added
-- **telemetry**: Implement Prometheus metrics catalog and HTTP metrics server
+- **Enterprise CLI Suite**: Integrated 6 production CLI subcommands (`benchmark`, `probe`, `inspect-state`, `doctor`, `top`, `hash-tree`).
+- **Console Executable**: Configured `[project.scripts]` in `pyproject.toml` exposing `reliadl` CLI command upon PyPI installation.
+- **Merkle Segment Auditing**: Added 4 KB segment Merkle tree auditing and corruption localization in `reliadl hash-tree`.
+- **Pre-Flight Network Probing**: Added infrastructure reachability, HTTP/2, `Accept-Ranges`, and corporate proxy tunnel diagnostic check in `reliadl probe`.
+- **Performance Benchmarking**: Added multi-core SHA-256 and Merkle computation throughput benchmarks and latency percentiles in `reliadl benchmark`.
+- **Environment Doctor**: Added host OS environment, file descriptor, write permission, and OpenSSL hardware acceleration check in `reliadl doctor`.
+- **Telemetry UI Dashboard**: Added live terminal metrics snapshot monitoring in `reliadl top`.
 
 ### Changed
-- Merge master into feat/prometheus-metrics
-- **readme**: Add installation verification commands (#96)
-- **deps**: Bump actions/attest-build-provenance from 1 to 4 (#102)
+- Refactored CLI parser structure into modular `src/cli.py` with full unit test coverage.
+- Updated README documentation with comprehensive CLI installation, verification, and usage guides.
+
+---
+
+## [0.2.1] — 2026-09-14
 
 ### Fixed
-- **telemetry**: Resolve Ruff lint and MyPy type-safety findings from review
-- **telemetry**: Disable address reuse on Windows so a port conflict is detected
+- **Packaging**: Mapped package namespace `reliadl = "src"` in `pyproject.toml` to eliminate `ModuleNotFoundError` when importing after `pip install reliadl`.
 
 ---
 

@@ -626,7 +626,7 @@ async def verified_download():
         on_progress=show_progress,
     )
     
-    print(f"\n{'✅ Verified' if result.is_verified else '❌ MISMATCH'}")
+    print(f"\n{'[VERIFIED]' if result.is_verified else '[MISMATCH]'}")
 ```
 
 ### 8.3 Download with Custom Headers (Auth)
@@ -666,9 +666,9 @@ async def verify_file():
     )
     
     if result.is_valid:
-        print(f"✅ File is intact ({result.bytes_verified:,} bytes verified)")
+        print(f"[PASS] File is intact ({result.bytes_verified:,} bytes verified)")
     else:
-        print(f"❌ Hash mismatch!")
+        print(f"[FAIL] Hash mismatch!")
         print(f"   Expected: {result.expected_hash}")
         print(f"   Computed: {result.computed_hash}")
 ```

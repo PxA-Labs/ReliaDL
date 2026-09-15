@@ -192,8 +192,8 @@ To sign a manifest:
                                     │
                                     ▼
                       [ Verify Ed25519 / RSA-PSS ]
-                        ├── ❌ Invalid ──▶ Raise ManifestSignatureMismatchError
-                        └── ✅ Valid   ──▶ Proceed with Verified Chunk Download
+                         ├── [FAIL] Invalid ──▶ Raise ManifestSignatureMismatchError
+                         └── [PASS] Valid   ──▶ Proceed with Verified Chunk Download
 ```
 
 ---

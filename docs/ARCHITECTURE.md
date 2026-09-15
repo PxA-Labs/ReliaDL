@@ -354,11 +354,11 @@ Where:
 
 ```
 Chunk Files on Disk:
-  .ReliaDL/chunks/00000.chunk  (8 MB, verified ✅)
-  .ReliaDL/chunks/00001.chunk  (8 MB, verified ✅)
-  .ReliaDL/chunks/00002.chunk  (8 MB, verified ✅)
+  .ReliaDL/chunks/00000.chunk  (8 MB, verified [PASS])
+  .ReliaDL/chunks/00001.chunk  (8 MB, verified [PASS])
+  .ReliaDL/chunks/00002.chunk  (8 MB, verified [PASS])
   ...
-  .ReliaDL/chunks/12799.chunk  (partial, verified ✅)
+  .ReliaDL/chunks/12799.chunk  (partial, verified [PASS])
 
 Assembly:
   1. Open output file for writing

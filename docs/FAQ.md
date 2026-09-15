@@ -142,27 +142,27 @@ A ChunkGuard Manifest is a cryptographically signed (Ed25519) JSON file that lis
 ### ReliaDL vs wget
 | Feature | wget | ReliaDL |
 |---|---|---|
-| Resume | ✅ (single-stream) | ✅ (per-chunk) |
-| Parallel downloads | ❌ | ✅ (configurable) |
-| Hash verification | ❌ (manual) | ✅ (automatic per-chunk + whole-file) |
-| Selective re-download | ❌ | ✅ |
-| Corruption detection | ❌ | ✅ |
+| Resume | [YES] (single-stream) | [YES] (per-chunk) |
+| Parallel downloads | [NO] | [YES] (configurable) |
+| Hash verification | [NO] (manual) | [YES] (automatic per-chunk + whole-file) |
+| Selective re-download | [NO] | [YES] |
+| Corruption detection | [NO] | [YES] |
 
 ### ReliaDL vs aria2
 | Feature | aria2 | ReliaDL |
 |---|---|---|
-| Parallel downloads | ✅ | ✅ |
-| Per-chunk hash verification | ❌ | ✅ |
-| Selective re-download | Partial | ✅ |
-| BitTorrent support | ✅ | ❌ |
+| Parallel downloads | [YES] | [YES] |
+| Per-chunk hash verification | [NO] | [YES] |
+| Selective re-download | Partial | [YES] |
+| BitTorrent support | [YES] | [NO] |
 | Simplicity | Complex | Simple |
 
 ### ReliaDL vs BitTorrent
 | Feature | BitTorrent | ReliaDL |
 |---|---|---|
-| Peer-to-peer | ✅ | ❌ (HTTP only) |
-| Per-piece hash verification | ✅ | ✅ |
-| Requires torrent file/magnet | ✅ | ❌ (just a URL) |
-| Works with any HTTP server | ❌ | ✅ |
-| Firewall friendly | ❌ (needs ports) | ✅ (outbound HTTPS only) |
+| Peer-to-peer | [YES] | [NO] (HTTP only) |
+| Per-piece hash verification | [YES] | [YES] |
+| Requires torrent file/magnet | [YES] | [NO] (just a URL) |
+| Works with any HTTP server | [NO] | [YES] |
+| Firewall friendly | [NO] (needs ports) | [YES] (outbound HTTPS only) |
 
