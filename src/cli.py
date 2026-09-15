@@ -27,7 +27,7 @@ from src.state_manager import StateManager
 
 logger = get_logger("reliadl.cli")
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
