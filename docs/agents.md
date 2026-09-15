@@ -4,7 +4,7 @@ To enable long-term memory, personalization, and context retention for AI agents
 
 ---
 
-## 🚀 Overview of Mem0 Memory
+## Overview of Mem0 Memory
 
 Mem0 provides an intelligent, self-improving memory layer for AI agents. It stores user preferences, system behaviors, and interaction history, and automatically extracts new facts from context.
 
@@ -16,7 +16,7 @@ Mem0 provides an intelligent, self-improving memory layer for AI agents. It stor
 
 ---
 
-## 🔑 Configuration & API Keys
+## Configuration & API Keys
 
 To connect to the Mem0 Platform, you need a Mem0 API key.
 
@@ -36,7 +36,7 @@ export OPENAI_API_KEY="your_openai_api_key_here"
 
 ---
 
-## 💻 Python Usage Examples
+## Python Usage Examples
 
 ### 1. Connecting to the Mem0 Platform (Recommended)
 
@@ -62,7 +62,7 @@ interaction = [
 ]
 
 client.add(interaction, user_id=USER_ID)
-print("✅ Context added to Mem0 memory.")
+print("Context added to Mem0 memory.")
 
 # --- Retrieve / Search Memory ---
 query = "What chunk size and worker configuration does the user prefer?"
@@ -101,7 +101,7 @@ memory.add("Prefers chunk size 16MB", user_id="user_1")
 
 ---
 
-## 🛡️ Best Practices for AI Agents
+## Best Practices for AI Agents
 
 1. **Clean Inputs**: When adding to memory, send structured messages (roles: `user`/`assistant`/`system`) rather than raw raw logs, to enable clean fact extraction.
 2. **Key Rotation**: Never hardcode API keys in code or commit them to the repository. Always use environment variables or secret vaults.

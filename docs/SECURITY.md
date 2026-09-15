@@ -136,12 +136,12 @@ Known attacks:      None practical
 
 | Algorithm | Status | Reason Not Used |
 |---|---|---|
-| **MD5** | ❌ Broken | Practical collision attacks since 2004 |
-| **SHA-1** | ❌ Broken | Collision demonstrated (SHAttered, 2017) |
-| **CRC32** | ❌ Not cryptographic | Trivially forged; only for error detection, not security |
-| **SHA-512** | ✅ Secure but slower | No meaningful security benefit over SHA-256 for integrity; slower on 32-bit |
-| **BLAKE3** | ✅ Secure and fast | Not in Python stdlib; adds dependency; not yet NIST-approved |
-| **SHA-256** | ✅ **Selected** | Secure, stdlib, hardware-accelerated, universally supported |
+| **MD5** | [BROKEN] | Practical collision attacks since 2004 |
+| **SHA-1** | [BROKEN] | Collision demonstrated (SHAttered, 2017) |
+| **CRC32** | [NOT CRYPTOGRAPHIC] | Trivially forged; only for error detection, not security |
+| **SHA-512** | [SECURE] (Slower) | No meaningful security benefit over SHA-256 for integrity; slower on 32-bit |
+| **BLAKE3** | [SECURE] (Fast) | Not in Python stdlib; adds dependency; not yet NIST-approved |
+| **SHA-256** | [SELECTED] | Secure, stdlib, hardware-accelerated, universally supported |
 
 ### 3.3 Hardware Acceleration
 

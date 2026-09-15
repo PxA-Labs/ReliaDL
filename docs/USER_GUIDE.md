@@ -98,7 +98,7 @@ ReliaDL verify "./largefile.iso" "e3b0c44298fc1c149afbf4c8996fb924..."
 
 Output:
 ```
-✅ File integrity verified
+[SUCCESS] File integrity verified
    File:     largefile.iso (100.0 GB)
    Hash:     e3b0c44298fc1c149afbf4c8996fb924...
    Duration: 42.3 seconds
@@ -106,7 +106,7 @@ Output:
 
 Or if it's corrupted:
 ```
-❌ File integrity check FAILED
+[FAIL] File integrity check FAILED
    File:      largefile.iso (100.0 GB)
    Expected:  e3b0c44298fc1c149afbf4c8996fb924...
    Computed:  9f8e7d6c5b4a3928170615049382716...
@@ -254,12 +254,12 @@ After successful download, the `.ReliaDL` directory is cleaned up automatically.
 
 | Code | Meaning |
 |---|---|
-| `0` | ✅ Success — file downloaded and verified |
-| `1` | ❌ General error — see error message |
-| `3` | 🌐 Network error — check internet connection |
-| `4` | 🔒 Integrity error — file hash doesn't match |
-| `5` | 💾 Storage error — disk full or no permission |
-| `10` | ⏹️ Cancelled — you pressed Ctrl+C |
+| `0` | [SUCCESS] File downloaded and verified |
+| `1` | [ERROR] General error — see error message |
+| `3` | [NETWORK] Network error — check internet connection |
+| `4` | [INTEGRITY] Integrity error — file hash doesn't match |
+| `5` | [STORAGE] Storage error — disk full or no permission |
+| `10` | [CANCELLED] Cancelled by user (Ctrl+C) |
 
 ---
 

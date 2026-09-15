@@ -332,7 +332,7 @@ ReliaDL download \
   --retries 5 \
   "${URL}" "${OUTPUT}"
 
-echo "✅ Download complete and verified"
+echo "[SUCCESS] Download complete and verified"
 ```
 
 ### 7.2 GitHub Actions Example

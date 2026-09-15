@@ -270,10 +270,10 @@ OUTPUT_FILE_PERMISSIONS = None  # Use system default
 
 | Platform | Python Version | File System | Atomic Rename | Tested |
 |---|---|---|---|---|
-| Linux (x86_64) | 3.10+ | ext4, XFS, Btrfs | ✅ `os.replace()` | ✅ |
-| macOS (arm64) | 3.10+ | APFS, HFS+ | ✅ `os.replace()` | ✅ |
-| Windows 10+ (x86_64) | 3.10+ | NTFS | ✅ `os.replace()` | ✅ |
-| Windows (FAT32) | 3.10+ | FAT32 | ⚠️ Non-atomic | ⚠️ Limited |
+| Linux (x86_64) | 3.10+ | ext4, XFS, Btrfs | [YES] `os.replace()` | [YES] |
+| macOS (arm64) | 3.10+ | APFS, HFS+ | [YES] `os.replace()` | [YES] |
+| Windows 10+ (x86_64) | 3.10+ | NTFS | [YES] `os.replace()` | [YES] |
+| Windows (FAT32) | 3.10+ | FAT32 | [LIMITED] Non-atomic | [LIMITED] |
 
 ### Large File Support
 

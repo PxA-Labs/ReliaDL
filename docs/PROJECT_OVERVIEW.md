@@ -67,18 +67,18 @@ Imagine shipping a 1,000-page book across the country. The traditional approach 
 │         ▼                                                       │
 │  5. PER-CHUNK VERIFY:  SHA-256 hash each chunk on arrival       │
 │         │                                                       │
-│         ├── ✅ Hash matches → mark chunk COMPLETE                │
-│         │                                                       │
-│         └── ❌ Hash mismatch → mark chunk FAILED → retry        │
+│         ├── [PASS] Hash matches → mark chunk COMPLETE            │
+│                                                                 │
+│         └── [FAIL] Hash mismatch → mark chunk FAILED → retry     │
 │                                                                 │
 │  6. REASSEMBLE:  Concatenate verified chunks in order           │
 │         │                                                       │
 │         ▼                                                       │
 │  7. FINAL VERIFY:  SHA-256 of entire assembled file             │
 │         │                                                       │
-│         ├── ✅ Match → download COMPLETE                         │
+│         ├── [PASS] Match → download COMPLETE                    │
 │         │                                                       │
-│         └── ❌ Mismatch → identify & retry failed chunks        │
+│         └── [FAIL] Mismatch → identify & retry failed chunks    │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -124,26 +124,26 @@ Imagine shipping a 1,000-page book across the country. The traditional approach 
 
 ### In Scope (v1.0)
 
-- ✅ Chunked downloads via HTTP/HTTPS Range requests
-- ✅ SHA-256 per-chunk and whole-file verification
-- ✅ Configurable chunk size (1 MB – 256 MB)
-- ✅ Parallel downloads with configurable concurrency (1–32 workers)
-- ✅ Persistent state for resume-after-crash
-- ✅ Automatic retries with exponential backoff + jitter
-- ✅ CLI interface for download, resume, and verify operations
-- ✅ Structured JSON logging for observability
-- ✅ Progress reporting (percentage, speed, ETA)
-- ✅ Configurable via YAML configuration file
+- [YES] Chunked downloads via HTTP/HTTPS Range requests
+- [YES] SHA-256 per-chunk and whole-file verification
+- [YES] Configurable chunk size (1 MB – 256 MB)
+- [YES] Parallel downloads with configurable concurrency (1–32 workers)
+- [YES] Persistent state for resume-after-crash
+- [YES] Automatic retries with exponential backoff + jitter
+- [YES] CLI interface for download, resume, and verify operations
+- [YES] Structured JSON logging for observability
+- [YES] Progress reporting (percentage, speed, ETA)
+- [YES] Configurable via YAML configuration file
 
 ### Out of Scope (v1.0)
 
-- ❌ GUI / graphical interface
-- ❌ Upload (reverse direction)
-- ❌ BitTorrent / peer-to-peer protocols
-- ❌ FTP / SFTP / S3 protocols (HTTP/HTTPS only)
-- ❌ Streaming / real-time data
-- ❌ Encryption at rest (chunks stored as plaintext)
-- ❌ Multi-file / directory batch downloads (planned v2.0)
+- [NO] GUI / graphical interface
+- [NO] Upload (reverse direction)
+- [NO] BitTorrent / peer-to-peer protocols
+- [NO] FTP / SFTP / S3 protocols (HTTP/HTTPS only)
+- [NO] Streaming / real-time data
+- [NO] Encryption at rest (chunks stored as plaintext)
+- [NO] Multi-file / directory batch downloads (planned v2.0)
 
 ---
 
