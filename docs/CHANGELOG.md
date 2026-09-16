@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+- **ci**: Upgrade Conventional Commit changelog generator and add auto release log workflow ([#110](https://github.com/PxA-Labs/ReliaDL/pull/110))
+
 ### Changed
 - **v0.3.0**: Update documentation for v0.3.0 release and standardize formatting (#106)
 - **cli**: Add comprehensive CLI guide documentation (#108)
