@@ -9,7 +9,7 @@
 
 **ReliaDL** is a production-grade, fault-tolerant parallel file download framework and high-throughput streaming engine. Designed for high-reliability data pipelines, enterprise infrastructure, and non-stationary channels, ReliaDL combines stochastic network optimization, per-chunk cryptographic integrity verification, corporate proxy tunneling, async rate limiting, and Prometheus observability.
 
-[PyPI Package](https://pypi.org/project/reliadl/) | [Documentation](docs/PROJECT_OVERVIEW.md) | [Release Notes](https://github.com/PxA-Labs/ReliaDL/releases) | [RFC Roadmap](https://github.com/PxA-Labs/ReliaDL/discussions/83) | [Issue Tracker](https://github.com/PxA-Labs/ReliaDL/issues)
+[PyPI Package](https://pypi.org/project/reliadl/) | [Documentation](docs/PROJECT_OVERVIEW.md) | [CLI Guide](docs/CLI_GUIDE.md) | [Release Notes](https://github.com/PxA-Labs/ReliaDL/releases) | [RFC Roadmap](https://github.com/PxA-Labs/ReliaDL/discussions/83) | [Issue Tracker](https://github.com/PxA-Labs/ReliaDL/issues)
 
 ---
 
