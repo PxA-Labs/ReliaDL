@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from src.cli import (
+from reliadl.cli import (
     build_parser,
     main,
     run_benchmark,
@@ -18,8 +18,8 @@ from src.cli import (
     run_top,
     run_verify,
 )
-from src.hash_verifier import compute_file_hash
-from src.manifest import ChunkManifest, ManifestChunk, ArtifactMetadata, ChunkingTopology
+from reliadl.hash_verifier import compute_file_hash
+from reliadl.manifest import ChunkManifest, ManifestChunk, ArtifactMetadata, ChunkingTopology
 
 
 class TestCLISubcommands(unittest.TestCase):

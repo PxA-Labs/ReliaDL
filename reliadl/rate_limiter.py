@@ -54,7 +54,7 @@ import time
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Optional
 
-from src.exceptions import ConfigurationError
+from reliadl.exceptions import ConfigurationError
 
 # Capacity, in seconds of sustained rate, used when none is configured. One
 # second of allowance absorbs the gaps between chunk requests without letting a

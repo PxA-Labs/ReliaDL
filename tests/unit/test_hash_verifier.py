@@ -13,8 +13,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.exceptions import ConfigurationError, FileHashMismatchError, StorageError
-from src.hash_verifier import (
+from reliadl.exceptions import ConfigurationError, FileHashMismatchError, StorageError
+from reliadl.hash_verifier import (
     DEFAULT_BUFFER_SIZE,
     StreamingHashVerifier,
     async_verify_file_hash,

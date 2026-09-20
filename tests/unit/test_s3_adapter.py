@@ -13,8 +13,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from src.adapters.base import SignedRequest, format_range_header
-from src.adapters.s3_adapter import (
+from reliadl.adapters.base import SignedRequest, format_range_header
+from reliadl.adapters.s3_adapter import (
     ALGORITHM,
     DEFAULT_REGION,
     EMPTY_PAYLOAD_SHA256,
@@ -27,7 +27,7 @@ from src.adapters.s3_adapter import (
     is_dns_compatible_bucket,
     resolve_credentials,
 )
-from src.exceptions import ConfigurationError
+from reliadl.exceptions import ConfigurationError
 
 # AWS publishes two worked examples that use secrets differing by a single
 # character. Mixing them up produces a correct implementation that fails its

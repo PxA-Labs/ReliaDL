@@ -13,13 +13,13 @@ import threading
 import unittest
 from typing import List
 
-from src.algorithms.task_deque import (
+from reliadl.algorithms.task_deque import (
     DEFAULT_INITIAL_CAPACITY,
     ChaseLevDeque,
     StealResult,
     StealStatus,
 )
-from src.exceptions import ConfigurationError
+from reliadl.exceptions import ConfigurationError
 
 
 class TestConstruction(unittest.TestCase):

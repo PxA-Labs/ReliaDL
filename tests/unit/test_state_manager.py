@@ -13,15 +13,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.exceptions import StateCorruptedError, StateNotFoundError
-from src.models import (
+from reliadl.exceptions import StateCorruptedError, StateNotFoundError
+from reliadl.models import (
     ChunkState,
     ChunkStatus,
     DownloadState,
     DownloadStatistics,
     DownloadStatus,
 )
-from src.state_manager import (
+from reliadl.state_manager import (
     STATE_FILE_PERMISSIONS,
     StateManager,
 )

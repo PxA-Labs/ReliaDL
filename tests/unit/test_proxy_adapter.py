@@ -17,8 +17,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Callable, List, Optional
 
-import src.adapters.proxy_adapter as proxy_module
-from src.adapters.proxy_adapter import (
+import reliadl.adapters.proxy_adapter as proxy_module
+from reliadl.adapters.proxy_adapter import (
     DEFAULT_TIMEOUT,
     SOCKS_ATYP_DOMAIN,
     SOCKS_ATYP_IPV4,
@@ -33,7 +33,7 @@ from src.adapters.proxy_adapter import (
     read_until_blank_line,
     recv_exact,
 )
-from src.exceptions import (
+from reliadl.exceptions import (
     ProxyAuthenticationError,
     ProxyConnectionError,
     ProxyError,

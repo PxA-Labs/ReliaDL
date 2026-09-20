@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.algorithms.adaptive_chunker import (
+from reliadl.algorithms.adaptive_chunker import (
     DEFAULT_CHUNK_SIZE,
     DEFAULT_MSS_BYTES,
     MAX_CHUNK_SIZE,
@@ -19,11 +19,11 @@ from src.algorithms.adaptive_chunker import (
     align_to_power_of_two,
     is_power_of_two,
 )
-from src.algorithms.metrics_collector import (
+from reliadl.algorithms.metrics_collector import (
     NetworkMetricsCollector,
     NetworkStateSnapshot,
 )
-from src.exceptions import ConfigurationError
+from reliadl.exceptions import ConfigurationError
 
 MB = 1024 * 1024
 

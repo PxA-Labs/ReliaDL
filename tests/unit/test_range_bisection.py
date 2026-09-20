@@ -13,7 +13,7 @@ import unittest
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from src.algorithms.work_stealer import (
+from reliadl.algorithms.work_stealer import (
     DEFAULT_MIN_SPLIT_BYTES,
     BisectionTrigger,
     RangeBisection,
@@ -24,8 +24,8 @@ from src.algorithms.work_stealer import (
     bisect_range,
     can_bisect,
 )
-from src.exceptions import ConfigurationError
-from src.models import ChunkSpec
+from reliadl.exceptions import ConfigurationError
+from reliadl.models import ChunkSpec
 
 MB = 1024 * 1024
 

@@ -15,7 +15,7 @@ import threading
 import unittest
 from typing import Callable, Dict, List
 
-from src.algorithms.mirror_bandit import (
+from reliadl.algorithms.mirror_bandit import (
     DEFAULT_EXPLORATION_RATE,
     DEFAULT_HORIZON_ROUNDS,
     DEFAULT_WEIGHT_DECAY,
@@ -24,7 +24,7 @@ from src.algorithms.mirror_bandit import (
     WeightUpdate,
     decay_for_horizon,
 )
-from src.exceptions import ConfigurationError
+from reliadl.exceptions import ConfigurationError
 
 MIRRORS = ["m1", "m2", "m3"]
 

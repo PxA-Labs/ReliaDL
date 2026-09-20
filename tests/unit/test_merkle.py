@@ -7,11 +7,11 @@ from __future__ import annotations
 import hashlib
 import unittest
 
-from src.exceptions import (
+from reliadl.exceptions import (
     ManifestError,
     SubBlockCorruptedError,
 )
-from src.manifest import (
+from reliadl.manifest import (
     ArtifactMetadata,
     BinaryMerkleTree,
     ChunkingTopology,

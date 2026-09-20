@@ -61,7 +61,7 @@ from enum import Enum
 from typing import Optional, Tuple
 from urllib.parse import unquote, urlsplit
 
-from src.exceptions import (
+from reliadl.exceptions import (
     ProxyAuthenticationError,
     ProxyConnectionError,
     ProxyError,

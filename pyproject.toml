@@ -32,7 +32,7 @@ dependencies = [
 ]
 
 [project.scripts]
-reliadl = "src.cli:main"
+reliadl = "reliadl.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/PxA-Labs/ReliaDL"
@@ -41,22 +41,9 @@ Repository = "https://github.com/PxA-Labs/ReliaDL.git"
 Issues = "https://github.com/PxA-Labs/ReliaDL/issues"
 Discussions = "https://github.com/PxA-Labs/ReliaDL/discussions"
 
-[tool.setuptools]
-packages = [
-    "reliadl",
-    "reliadl.adapters",
-    "reliadl.algorithms",
-    "reliadl.telemetry",
-    "src",
-    "src.adapters",
-    "src.algorithms",
-    "src.telemetry"
-]
-
-[tool.setuptools.package-dir]
-reliadl = "src"
-src = "src"
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["reliadl*"]
 
 [tool.setuptools.package-data]
-src = ["default_config.yaml", "py.typed"]
 reliadl = ["default_config.yaml", "py.typed"]

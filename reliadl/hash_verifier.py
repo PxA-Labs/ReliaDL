@@ -13,12 +13,12 @@ import time
 from pathlib import Path
 from typing import BinaryIO, Callable, Iterable, Optional, Union
 
-from src.exceptions import (
+from reliadl.exceptions import (
     ConfigurationError,
     FileHashMismatchError,
     StorageError,
 )
-from src.models import VerificationResult
+from reliadl.models import VerificationResult
 
 # Default streaming buffer chunk size (64 KB)
 DEFAULT_BUFFER_SIZE = 64 * 1024

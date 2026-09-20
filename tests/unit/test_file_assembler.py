@@ -11,9 +11,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.exceptions import AssemblyFailedError, FileHashMismatchError
-from src.file_assembler import FileAssembler
-from src.models import (
+from reliadl.exceptions import AssemblyFailedError, FileHashMismatchError
+from reliadl.file_assembler import FileAssembler
+from reliadl.models import (
     ChunkState,
     ChunkStatus,
     DownloadState,

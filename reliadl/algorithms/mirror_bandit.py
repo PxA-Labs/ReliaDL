@@ -103,8 +103,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
-from src.exceptions import ConfigurationError
-from src.models import ChunkSpec
+from reliadl.exceptions import ConfigurationError
+from reliadl.models import ChunkSpec
 
 # Fraction of each round's probability mass spread uniformly across mirrors.
 # Also the floor on any selection probability, and therefore the cap on the

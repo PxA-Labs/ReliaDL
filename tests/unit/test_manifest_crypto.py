@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import unittest
 
-from src.exceptions import ManifestSignatureMismatchError
-from src.manifest import (
+from reliadl.exceptions import ManifestSignatureMismatchError
+from reliadl.manifest import (
     ArtifactMetadata,
     ChunkingTopology,
     ChunkManifest,

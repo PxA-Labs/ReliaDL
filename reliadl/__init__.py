@@ -5,7 +5,7 @@ Fault-tolerant, high-throughput chunked download engine.
 
 from __future__ import annotations
 
-from src.config import (
+from reliadl.config import (
     apply_env_overrides,
     deep_merge,
     format_size,
@@ -14,13 +14,13 @@ from src.config import (
     load_yaml_file,
     parse_size,
 )
-from src.rate_limiter import (
+from reliadl.rate_limiter import (
     DEFAULT_BURST_SECONDS,
     BucketState,
     TokenBucketRateLimiter,
     UnlimitedRateLimiter,
 )
-from src.telemetry.metrics import (
+from reliadl.telemetry.metrics import (
     Counter,
     DownloadMetrics,
     Gauge,
@@ -28,14 +28,14 @@ from src.telemetry.metrics import (
     MetricsRegistry,
     MetricsServer,
 )
-from src.algorithms.adaptive_chunker import (
+from reliadl.algorithms.adaptive_chunker import (
     BLDCSController,
     ChunkSizingDecision,
     DynamicChunkPlanner,
     align_to_power_of_two,
     is_power_of_two,
 )
-from src.algorithms.metrics_collector import (
+from reliadl.algorithms.metrics_collector import (
     DEFAULT_DEVIATION_ALPHA,
     DEFAULT_FAILURE_WINDOW_SIZE,
     DEFAULT_RTT_ALPHA,
@@ -46,7 +46,7 @@ from src.algorithms.metrics_collector import (
     NetworkStateSnapshot,
     TransferSample,
 )
-from src.exceptions import (
+from reliadl.exceptions import (
     AllocationError,
     AssemblyError,
     AssemblyFailedError,
@@ -78,11 +78,11 @@ from src.exceptions import (
     SubBlockCorruptedError,
     TimeoutError,
 )
-from src.file_assembler import (
+from reliadl.file_assembler import (
     DEFAULT_ASSEMBLY_BUFFER_SIZE,
     FileAssembler,
 )
-from src.hash_verifier import (
+from reliadl.hash_verifier import (
     DEFAULT_BUFFER_SIZE,
     StreamingHashVerifier,
     async_verify_file_hash,
@@ -92,12 +92,12 @@ from src.hash_verifier import (
     verify_file_hash,
     verify_stream,
 )
-from src.logger import (
+from reliadl.logger import (
     configure_logger,
     get_logger,
     redact_credentials,
 )
-from src.models import (
+from reliadl.models import (
     ChunkResult,
     ChunkSpec,
     ChunkState,
@@ -109,16 +109,16 @@ from src.models import (
     DownloadStatus,
     ProgressReport,
 )
-from src.sparse_writer import (
+from reliadl.sparse_writer import (
     AllocationStrategy,
     SparseFileWriter,
 )
-from src.state_manager import (
+from reliadl.state_manager import (
     CHUNK_FILE_PERMISSIONS,
     STATE_FILE_PERMISSIONS,
     StateManager,
 )
-from src.manifest import (
+from reliadl.manifest import (
     DEFAULT_SUB_BLOCK_SIZE,
     ArtifactMetadata,
     BinaryMerkleTree,

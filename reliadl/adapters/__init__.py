@@ -7,14 +7,14 @@ it, leaving the transport to issue it.
 
 from __future__ import annotations
 
-from src.adapters.base import (
+from reliadl.adapters.base import (
     BaseRangeAdapter,
     ObjectLocation,
     SignedRequest,
     format_range_header,
 )
 
-from src.adapters.s3_adapter import (
+from reliadl.adapters.s3_adapter import (
     ALGORITHM,
     DEFAULT_REGION,
     EMPTY_PAYLOAD_SHA256,
@@ -28,7 +28,7 @@ from src.adapters.s3_adapter import (
     resolve_credentials,
 )
 
-from src.adapters.gcs_adapter import (
+from reliadl.adapters.gcs_adapter import (
     CREDENTIALS_ENV,
     GCS_HOST,
     GCS_READ_SCOPE,
@@ -37,7 +37,7 @@ from src.adapters.gcs_adapter import (
     GCSServiceAccount,
     find_application_default_credentials,
 )
-from src.adapters.azure_adapter import (
+from reliadl.adapters.azure_adapter import (
     AZURE_API_VERSION,
     AZURE_BLOB_SUFFIX,
     AzureAuthMode,
@@ -47,7 +47,7 @@ from src.adapters.azure_adapter import (
     format_rfc1123,
 )
 
-from src.adapters.proxy_adapter import (
+from reliadl.adapters.proxy_adapter import (
     DEFAULT_TIMEOUT,
     ProxyConfig,
     ProxyTunnel,

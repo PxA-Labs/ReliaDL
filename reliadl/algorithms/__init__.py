@@ -7,7 +7,7 @@ network state estimation, dynamic chunk sizing, and worker scheduling.
 
 from __future__ import annotations
 
-from src.algorithms.adaptive_chunker import (
+from reliadl.algorithms.adaptive_chunker import (
     DEFAULT_CHUNK_SIZE,
     DEFAULT_EPSILON,
     DEFAULT_GAMMA,
@@ -22,7 +22,7 @@ from src.algorithms.adaptive_chunker import (
     align_to_power_of_two,
     is_power_of_two,
 )
-from src.algorithms.work_stealer import (
+from reliadl.algorithms.work_stealer import (
     DEFAULT_MIN_SPLIT_BYTES,
     DEFAULT_STRAGGLER_FACTOR,
     BisectionTrigger,
@@ -36,14 +36,14 @@ from src.algorithms.work_stealer import (
     bisect_range,
     can_bisect,
 )
-from src.algorithms.task_deque import (
+from reliadl.algorithms.task_deque import (
     DEFAULT_INITIAL_CAPACITY,
     DEFAULT_STEAL_ATTEMPTS,
     ChaseLevDeque,
     StealResult,
     StealStatus,
 )
-from src.algorithms.mirror_bandit import (
+from reliadl.algorithms.mirror_bandit import (
     DEFAULT_BACKOFF_MULTIPLIER,
     DEFAULT_COOLDOWN_SECONDS,
     DEFAULT_EXPLORATION_RATE,
@@ -67,7 +67,7 @@ from src.algorithms.mirror_bandit import (
     WeightUpdate,
     decay_for_horizon,
 )
-from src.algorithms.metrics_collector import (
+from reliadl.algorithms.metrics_collector import (
     DEFAULT_DEVIATION_ALPHA,
     DEFAULT_FAILURE_WINDOW_SIZE,
     DEFAULT_RTT_ALPHA,

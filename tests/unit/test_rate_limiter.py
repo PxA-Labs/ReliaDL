@@ -17,8 +17,8 @@ import time
 import unittest
 from typing import List, Tuple
 
-from src.exceptions import ConfigurationError
-from src.rate_limiter import (
+from reliadl.exceptions import ConfigurationError
+from reliadl.rate_limiter import (
     DEFAULT_BURST_SECONDS,
     BucketState,
     TokenBucketRateLimiter,

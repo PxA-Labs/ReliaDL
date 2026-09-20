@@ -54,7 +54,7 @@ from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple, TypeVar, cast
 
-from src.exceptions import ConfigurationError
+from reliadl.exceptions import ConfigurationError
 
 # Content type a Prometheus scraper expects for the text exposition format.
 CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"

@@ -14,15 +14,15 @@ import threading
 import unittest
 from typing import Dict, List, Optional
 
-from src.algorithms.mirror_bandit import (
+from reliadl.algorithms.mirror_bandit import (
     CircuitState,
     DispatchOutcome,
     EXP3Bandit,
     MirrorDispatcher,
     MirrorEndpoint,
 )
-from src.exceptions import ConfigurationError
-from src.models import ChunkSpec
+from reliadl.exceptions import ConfigurationError
+from reliadl.models import ChunkSpec
 
 MB = 1024 * 1024
 

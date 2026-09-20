@@ -56,13 +56,13 @@ from urllib.parse import quote, urlsplit
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
-from src.adapters.base import (
+from reliadl.adapters.base import (
     BaseRangeAdapter,
     ObjectLocation,
     SignedRequest,
     format_range_header,
 )
-from src.exceptions import ConfigurationError
+from reliadl.exceptions import ConfigurationError
 
 # XML API host for object reads. Range requests are served directly from it.
 GCS_HOST = "storage.googleapis.com"

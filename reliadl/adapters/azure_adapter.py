@@ -55,13 +55,13 @@ from enum import Enum
 from typing import Callable, Dict, Mapping, Optional, Tuple
 from urllib.parse import parse_qs, quote, urlsplit
 
-from src.adapters.base import (
+from reliadl.adapters.base import (
     BaseRangeAdapter,
     ObjectLocation,
     SignedRequest,
     format_range_header,
 )
-from src.exceptions import ConfigurationError
+from reliadl.exceptions import ConfigurationError
 
 # Blob service endpoint suffix for the public Azure cloud.
 AZURE_BLOB_SUFFIX = "blob.core.windows.net"

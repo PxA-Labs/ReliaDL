@@ -56,13 +56,13 @@ from pathlib import Path
 from typing import Callable, Dict, Mapping, Optional, Tuple
 from urllib.parse import parse_qs, quote, urlsplit
 
-from src.adapters.base import (
+from reliadl.adapters.base import (
     BaseRangeAdapter,
     ObjectLocation,
     SignedRequest,
     format_range_header,
 )
-from src.exceptions import ConfigurationError
+from reliadl.exceptions import ConfigurationError
 
 # SigV4 algorithm identifier, carried in the Authorization header.
 ALGORITHM = "AWS4-HMAC-SHA256"

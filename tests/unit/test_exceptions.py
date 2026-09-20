@@ -9,7 +9,7 @@ import builtins
 import unittest
 from datetime import datetime
 
-from src.exceptions import (
+from reliadl.exceptions import (
     AllocationError,
     AssemblyError,
     AssemblyFailedError,

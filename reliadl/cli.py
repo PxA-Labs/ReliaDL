@@ -18,12 +18,12 @@ import urllib.error
 from pathlib import Path
 from typing import Optional, Sequence
 
-from src.adapters.proxy_adapter import ProxyConfig, ProxyTunnel
-from src.config import format_size
-from src.hash_verifier import StreamingHashVerifier, compute_file_hash, constant_time_compare
-from src.logger import configure_logger, get_logger
-from src.manifest import BinaryMerkleTree, compute_merkle_root, load_manifest
-from src.state_manager import StateManager
+from reliadl.adapters.proxy_adapter import ProxyConfig, ProxyTunnel
+from reliadl.config import format_size
+from reliadl.hash_verifier import StreamingHashVerifier, compute_file_hash, constant_time_compare
+from reliadl.logger import configure_logger, get_logger
+from reliadl.manifest import BinaryMerkleTree, compute_merkle_root, load_manifest
+from reliadl.state_manager import StateManager
 
 logger = get_logger("reliadl.cli")
 
