@@ -53,19 +53,17 @@ pip install -e ".[dev]"
 
 ### 2.3 Docker
 
-```dockerfile
-FROM python:3.12-slim
-
-RUN pip install --no-cache-dir ReliaDL
-
-ENTRYPOINT ["ReliaDL"]
-```
+Official multi-architecture images are published to GitHub Container Registry for every tagged release. See [DOCKER.md](DOCKER.md) for the full container deployment guide.
 
 ```bash
-docker build -t ReliaDL .
-docker run -v /downloads:/downloads ReliaDL download \
-  --url "https://example.com/file.iso" \
-  --output "/downloads/file.iso"
+# Pull the official image (linux/amd64 or linux/arm64 — auto-selected)
+docker pull ghcr.io/pxa-labs/reliadl:latest
+
+# Run a download
+docker run --rm \
+  -v "$(pwd)/downloads:/downloads" \
+  ghcr.io/pxa-labs/reliadl:latest \
+  download --url "https://example.com/file.iso" --output /downloads/file.iso
 ```
 
 ### 2.4 Dependencies
