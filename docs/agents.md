@@ -4,6 +4,24 @@ To enable long-term memory, personalization, and context retention for AI agents
 
 ---
 
+## ⚠️ GitHub Account Rule
+
+> **NEVER use the `devgit-innspire` GitHub account for any work on this project.**
+>
+> All commits, pull requests, branch pushes, and GitHub CLI operations **must** be performed exclusively under the **`archittmittal`** account.
+>
+> Before running any `git` or `gh` command, verify the active account with:
+> ```bash
+> gh auth status
+> # Confirm: Active account: archittmittal
+> ```
+> If `devgit-innspire` is active, switch immediately:
+> ```bash
+> gh auth switch --user archittmittal
+> ```
+
+---
+
 ## Overview of Mem0 Memory
 
 Mem0 provides an intelligent, self-improving memory layer for AI agents. It stores user preferences, system behaviors, and interaction history, and automatically extracts new facts from context.
