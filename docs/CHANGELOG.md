@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 - **ci**: Upgrade Conventional Commit changelog generator and add auto release log workflow ([#110](https://github.com/PxA-Labs/ReliaDL/pull/110))
+- **dist**: System package manager distribution (Homebrew, WinGet, Scoop, DEB, RPM)
+
+### Bug Fixes
+- **packaging**: Sync Dockerfile, reliadl.spec, and mkdocs.yml with master and reliadl package structure
+- **ci**: Resolve template variables for nFPM in packages.yml
+- **packaging**: Remove Markdown changelog parsing from nFPM spec and bundle as doc
 
 ### Documentation
 - **release**: Add dedicated release log file and release log generator script
