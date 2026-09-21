@@ -12,7 +12,6 @@ description: "Production-grade fault-tolerant parallel file downloader with per-
 vendor: "PxA-Labs"
 homepage: "https://github.com/PxA-Labs/ReliaDL"
 license: "Apache-2.0"
-changelog: "docs/CHANGELOG.md"
 
 contents:
   - src: "${BINARY_PATH}"
@@ -25,6 +24,10 @@ contents:
       mode: 0644
   - src: "README.md"
     dst: "/usr/share/doc/reliadl/README.md"
+    file_info:
+      mode: 0644
+  - src: "docs/CHANGELOG.md"
+    dst: "/usr/share/doc/reliadl/changelog.md"
     file_info:
       mode: 0644
 
