@@ -15,7 +15,7 @@ WORKDIR /build
 
 # Copy only dependency manifests first to exploit layer caching
 COPY requirements.txt pyproject.toml README.md LICENSE ./
-COPY src/ ./src/
+COPY reliadl/ ./reliadl/
 
 # Install into an isolated prefix so we can COPY just the result
 RUN pip install --no-cache-dir --prefix=/install .
@@ -54,7 +54,7 @@ EXPOSE 9090
 
 # Health-check: verify the CLI entrypoint is importable
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import src; print('ok')" || exit 1
+    CMD python -c "import reliadl; print('ok')" || exit 1
 
 ENTRYPOINT ["reliadl"]
 CMD ["--help"]

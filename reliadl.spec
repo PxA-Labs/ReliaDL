@@ -16,7 +16,7 @@ from pathlib import Path
 
 # Resolve paths relative to the spec file
 REPO_ROOT = Path(SPECPATH)  # noqa: F821 — SPECPATH injected by PyInstaller
-SRC_DIR = REPO_ROOT / "src"
+SRC_DIR = REPO_ROOT / "reliadl"
 
 block_cipher = None
 
@@ -30,8 +30,8 @@ a = Analysis(
 
     # Bundle the default config and py.typed marker that ship with the package
     datas=[
-        (str(SRC_DIR / "default_config.yaml"), "src"),
-        (str(SRC_DIR / "py.typed"), "src"),
+        (str(SRC_DIR / "default_config.yaml"), "reliadl"),
+        (str(SRC_DIR / "py.typed"), "reliadl"),
     ],
 
     hiddenimports=[

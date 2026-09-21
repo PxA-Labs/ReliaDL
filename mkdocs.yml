@@ -98,8 +98,11 @@ nav:
     - Project Overview: PROJECT_OVERVIEW.md
     - User Guide: USER_GUIDE.md
     - FAQ: FAQ.md
-  - CLI Reference:
+  - CLI & Deployment:
     - CLI Guide: CLI_GUIDE.md
+    - Standalone Executables: BINARIES.md
+    - System Package Managers: PACKAGES.md
+    - Docker Container: DOCKER.md
     - Deployment Guide: DEPLOYMENT_GUIDE.md
   - Architecture:
     - System Architecture: ARCHITECTURE.md
