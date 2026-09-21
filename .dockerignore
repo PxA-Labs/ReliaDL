@@ -1,0 +1,50 @@
+# ReliaDL Docker — files not needed inside the image
+
+# Python artefacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+site/
+*.egg
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Dev / CI artefacts
+.git/
+.github/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+coverage.xml
+.coverage
+htmlcov/
+
+# Documentation
+docs/
+mkdocs.yml
+docs-requirements.txt
+
+# Tests
+tests/
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Secrets / envs
+.env
+.env.*
+!.env.example
+
+# Scripts
+scripts/
+resolve*.py
