@@ -22,7 +22,7 @@ After installing ReliaDL via `pip install reliadl`, the CLI can be invoked in tw
    ```bash
    python -m reliadl.cli <subcommand> [options]
    # or
-   python -m src.main <subcommand> [options]
+   python -m reliadl.main <subcommand> [options]
    ```
 
 ---

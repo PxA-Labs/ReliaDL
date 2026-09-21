@@ -17,12 +17,12 @@
 
 | Feature | Description | Architecture Component |
 | :--- | :--- | :--- |
-| **Cryptographic Integrity** | Per-chunk SHA-256 validation, homomorphic LtHash aggregation, and 4 KB Merkle tree segment localization | `src.hash_verifier` |
-| **Proxy Tunneling** | SOCKS5 (RFC 1928 / 1929) and HTTP CONNECT corporate proxy tunneling with destination-based TLS verification | `src.adapters.proxy_adapter` |
-| **Traffic Pacing** | Token Bucket rate limiter with single-threaded reservation scheduling preventing thundering herd spikes | `src.rate_limiter` |
-| **Observability** | Native Prometheus metrics catalog exporter and structured JSON logging engine | `src.telemetry` & `src.logger` |
-| **Stochastic Pacing** | Lyapunov-based dynamic chunk sizing (AdaChunk) and restless multi-armed bandit (Whittle index) scheduling | `src.algorithms` |
-| **Cloud Adapters** | Plug-and-play streaming adapters for AWS S3, Google Cloud Storage (GCS), and Azure Blob Storage | `src.adapters` |
+| **Cryptographic Integrity** | Per-chunk SHA-256 validation, homomorphic LtHash aggregation, and 4 KB Merkle tree segment localization | `reliadl.hash_verifier` |
+| **Proxy Tunneling** | SOCKS5 (RFC 1928 / 1929) and HTTP CONNECT corporate proxy tunneling with destination-based TLS verification | `reliadl.adapters.proxy_adapter` |
+| **Traffic Pacing** | Token Bucket rate limiter with single-threaded reservation scheduling preventing thundering herd spikes | `reliadl.rate_limiter` |
+| **Observability** | Native Prometheus metrics catalog exporter and structured JSON logging engine | `reliadl.telemetry` & `reliadl.logger` |
+| **Stochastic Pacing** | Lyapunov-based dynamic chunk sizing (AdaChunk) and restless multi-armed bandit (Whittle index) scheduling | `reliadl.algorithms` |
+| **Cloud Adapters** | Plug-and-play streaming adapters for AWS S3, Google Cloud Storage (GCS), and Azure Blob Storage | `reliadl.adapters` |
 
 ---
 
@@ -66,7 +66,7 @@ python -c "from reliadl import DownloadConfig; config = DownloadConfig(); print(
 
 ```python
 import asyncio
-from src.state_manager import StateManager
+from reliadl.state_manager import StateManager
 
 # Initialize resilient transfer state
 state_mgr = StateManager(target_path="./downloads/large_dataset.tar.gz")
@@ -76,7 +76,7 @@ print(f"Transfer state initialized: {state_mgr}")
 ### 2. Corporate Proxy Tunneling (SOCKS5 & HTTP CONNECT)
 
 ```python
-from src.adapters.proxy_adapter import ProxyConfig, ProxyType, ProxyTunnel
+from reliadl.adapters.proxy_adapter import ProxyConfig, ProxyType, ProxyTunnel
 
 # Configure SOCKS5 proxy with remote DNS resolution
 proxy_config = ProxyConfig(
@@ -96,7 +96,7 @@ connection = tunnel.open("secure.example.com", 443)
 
 ```python
 import asyncio
-from src.rate_limiter import TokenBucketRateLimiter
+from reliadl.rate_limiter import TokenBucketRateLimiter
 
 async def main():
     # Throttle transfer rate to 10 MB/s with a 2 MB burst capacity
@@ -112,7 +112,7 @@ asyncio.run(main())
 ### 4. Prometheus Telemetry Monitoring
 
 ```python
-from src.telemetry.metrics import DownloadMetrics, MetricsRegistry, MetricsServer
+from reliadl.telemetry.metrics import DownloadMetrics, MetricsRegistry, MetricsServer
 
 registry = MetricsRegistry()
 metrics = DownloadMetrics(registry)
@@ -128,7 +128,7 @@ with MetricsServer(registry, port=9090) as server:
 ### 5. Cryptographic Stream Hash Verification
 
 ```python
-from src.hash_verifier import StreamingHashVerifier, constant_time_compare
+from reliadl.hash_verifier import StreamingHashVerifier, constant_time_compare
 
 # Initialize streaming SHA-256 verifier
 verifier = StreamingHashVerifier(algorithm="sha256")
@@ -144,7 +144,7 @@ print(f"Payload valid: {is_valid}")
 
 ## Command Line Interface (CLI)
 
-ReliaDL includes a production CLI (`reliadl` or `python -m src.main`) for automated transfers, system diagnostics, pre-flight probing, telemetry monitoring, and Merkle tree auditing:
+ReliaDL includes a production CLI (`reliadl` or `python -m reliadl.main`) for automated transfers, system diagnostics, pre-flight probing, telemetry monitoring, and Merkle tree auditing:
 
 ```bash
 # 1. Parallel File Download
@@ -180,32 +180,32 @@ reliadl resume --state-file "./downloads/.reliadl/dataset.tar.gz.state"
 ```mermaid
 graph TB
     subgraph ClientLayer["1. Client & Configuration Layer"]
-        CLI["CLI Interface (src.main)"]
-        CONF["Configuration Engine (src.config)"]
-        SM["ACID State Persistence (src.state_manager)"]
+        CLI["CLI Interface (reliadl.main)"]
+        CONF["Configuration Engine (reliadl.config)"]
+        SM["ACID State Persistence (reliadl.state_manager)"]
     end
 
     subgraph ControlLayer["2. Optimization & Network Layer"]
-        AC["AdaChunk Optimizer (src.algorithms.adaptive_chunker)"]
-        RL["Token Bucket Rate Limiter (src.rate_limiter)"]
-        PA["Proxy Tunnel Adapter (src.adapters.proxy_adapter)"]
+        AC["AdaChunk Optimizer (reliadl.algorithms.adaptive_chunker)"]
+        RL["Token Bucket Rate Limiter (reliadl.rate_limiter)"]
+        PA["Proxy Tunnel Adapter (reliadl.adapters.proxy_adapter)"]
     end
 
     subgraph TransportLayer["3. Transport Engine & Worker Pool"]
-        DE["Download Engine (src.download_engine)"]
+        DE["Download Engine (reliadl.download_engine)"]
         W1["Worker 1 (HTTP/2 Range GET)"]
         W2["Worker 2 (HTTP/2 Range GET)"]
         WN["Worker K (HTTP/2 Range GET)"]
     end
 
     subgraph SecurityLayer["4. Cryptographic Verification & Observability"]
-        DH["Dual Hasher (src.hash_verifier)"]
+        DH["Dual Hasher (reliadl.hash_verifier)"]
         ML["Sub-Chunk Merkle Localizer"]
-        TEL["Prometheus Metrics Server (src.telemetry)"]
+        TEL["Prometheus Metrics Server (reliadl.telemetry)"]
     end
 
     subgraph StorageLayer["5. Zero-Copy Positional IO"]
-        FA["Positional Disk Writer (src.file_assembler)"]
+        FA["Positional Disk Writer (reliadl.file_assembler)"]
         OUT["Target Payload Artifact"]
     end
 

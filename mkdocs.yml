@@ -1,0 +1,126 @@
+site_name: ReliaDL
+site_description: Production-grade, fault-tolerant parallel file download framework with per-chunk SHA-256 cryptographic verification.
+site_url: https://pxa-labs.github.io/ReliaDL/
+repo_name: PxA-Labs/ReliaDL
+repo_url: https://github.com/PxA-Labs/ReliaDL
+edit_uri: edit/master/docs/
+
+theme:
+  name: material
+  logo: assets/logo.png
+  favicon: assets/logo.png
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - content.action.edit
+    - content.action.view
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+    view: material/eye
+
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+  - minify:
+      minify_html: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      title: On this page
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/PxA-Labs/ReliaDL
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/reliadl/
+  version:
+    provider: mike
+
+extra_css:
+  - stylesheets/extra.css
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Project Overview: PROJECT_OVERVIEW.md
+    - User Guide: USER_GUIDE.md
+    - FAQ: FAQ.md
+  - CLI Reference:
+    - CLI Guide: CLI_GUIDE.md
+    - Deployment Guide: DEPLOYMENT_GUIDE.md
+  - Architecture:
+    - System Architecture: ARCHITECTURE.md
+    - Data Flow: DATA_FLOW.md
+    - Technical Specification: TECHNICAL_SPECIFICATION.md
+    - Novel Algorithms: NOVEL_ALGORITHMS.md
+    - Performance: PERFORMANCE.md
+  - API Reference:
+    - API Reference: API_REFERENCE.md
+    - Manifest Specification: MANIFEST_SPECIFICATION.md
+    - Cloud Adapters: CLOUD_ADAPTERS.md
+    - Error Handling: ERROR_HANDLING.md
+  - Observability:
+    - Observability Guide: OBSERVABILITY.md
+  - Security:
+    - Security Policy: SECURITY.md
+  - Contributing:
+    - Contributing Guide: CONTRIBUTING.md
+    - Testing Strategy: TESTING_STRATEGY.md
+    - AI Agents & Memory: agents.md
+    - Glossary: GLOSSARY.md
+  - Releases:
+    - Changelog: CHANGELOG.md
+    - Release Log: RELEASE_LOG.md
