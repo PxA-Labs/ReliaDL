@@ -21,7 +21,7 @@ from tempfile import TemporaryDirectory
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519, padding, rsa
 
-from src.adapters.azure_adapter import (
+from reliadl.adapters.azure_adapter import (
     AZURE_API_VERSION,
     AZURE_BLOB_SUFFIX,
     AzureAuthMode,
@@ -30,7 +30,7 @@ from src.adapters.azure_adapter import (
     AzureSharedKeySigner,
     format_rfc1123,
 )
-from src.adapters.gcs_adapter import (
+from reliadl.adapters.gcs_adapter import (
     CREDENTIALS_ENV,
     GCS_HOST,
     GCS_READ_SCOPE,
@@ -39,7 +39,7 @@ from src.adapters.gcs_adapter import (
     GCSServiceAccount,
     find_application_default_credentials,
 )
-from src.exceptions import ConfigurationError
+from reliadl.exceptions import ConfigurationError
 
 ACCOUNT_KEY = base64.b64encode(b"0123456789abcdef0123456789abcdef").decode()
 FIXED_TIME = datetime(2013, 5, 24, 0, 0, 0, tzinfo=timezone.utc)

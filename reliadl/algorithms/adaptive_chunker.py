@@ -40,9 +40,9 @@ import threading
 from dataclasses import dataclass
 from typing import Optional
 
-from src.algorithms.metrics_collector import NetworkStateSnapshot
-from src.exceptions import ConfigurationError
-from src.models import ChunkSpec
+from reliadl.algorithms.metrics_collector import NetworkStateSnapshot
+from reliadl.exceptions import ConfigurationError
+from reliadl.models import ChunkSpec
 
 # Scaling coefficient applied to the loss-sensitivity term.
 DEFAULT_GAMMA = 1.0

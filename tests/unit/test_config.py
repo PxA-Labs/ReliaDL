@@ -15,7 +15,7 @@ from tempfile import TemporaryDirectory
 from unittest import mock
 from unittest.mock import patch
 
-from src.config import (
+from reliadl.config import (
     apply_env_overrides,
     deep_merge,
     format_size,
@@ -25,8 +25,8 @@ from src.config import (
     load_yaml_file,
     parse_size,
 )
-from src.exceptions import ConfigurationError
-from src.models import DownloadConfig
+from reliadl.exceptions import ConfigurationError
+from reliadl.models import DownloadConfig
 
 
 class TestSizeParserAndFormatter(unittest.TestCase):
@@ -256,7 +256,7 @@ class TestPackagedDefaults(unittest.TestCase):
 
         Package data is, which is the whole reason the file moved.
         """
-        packaged = resources.files("src") / "default_config.yaml"
+        packaged = resources.files("reliadl") / "default_config.yaml"
         self.assertTrue(packaged.is_file(), f"{packaged} is missing")
 
     def test_defaults_are_readable_through_the_import_system(self) -> None:
@@ -266,7 +266,7 @@ class TestPackagedDefaults(unittest.TestCase):
         A path assembled that way happens to work in a source checkout and
         resolves to nothing once installed.
         """
-        resource = resources.files("src") / "default_config.yaml"
+        resource = resources.files("reliadl") / "default_config.yaml"
         self.assertTrue(resource.is_file())
         self.assertIn("download:", resource.read_text(encoding="utf-8"))
 
@@ -300,7 +300,7 @@ class TestPackagedDefaults(unittest.TestCase):
         unnoticed; it must be loud instead.
         """
         with mock.patch(
-            "src.config.resources.files", side_effect=FileNotFoundError("gone")
+            "reliadl.config.resources.files", side_effect=FileNotFoundError("gone")
         ):
             with self.assertRaises(ConfigurationError) as caught:
                 load_default_config()
@@ -318,7 +318,7 @@ class TestPackagedDefaults(unittest.TestCase):
             def read_text(self, encoding: str = "utf-8") -> str:
                 return "- just\n- a list\n"
 
-        with mock.patch("src.config.resources.files", return_value=_Traversable()):
+        with mock.patch("reliadl.config.resources.files", return_value=_Traversable()):
             with self.assertRaises(ConfigurationError) as caught:
                 load_default_config()
         self.assertIn("mapping", str(caught.exception))
@@ -329,7 +329,7 @@ class TestPackagedDefaults(unittest.TestCase):
             path = Path(directory) / "default_config.yaml"
             path.write_text("download:\n  max_parallel_workers: 99\n")
             with mock.patch(
-                "src.config.find_default_config_path", return_value=path
+                "reliadl.config.find_default_config_path", return_value=path
             ):
                 self.assertEqual(
                     load_default_config()["download"]["max_parallel_workers"], 99
@@ -340,7 +340,7 @@ class TestPackagedDefaults(unittest.TestCase):
         Without PEP 561's marker a consumer's type checker ignores every hint
         the package publishes, however thoroughly it is annotated.
         """
-        marker = resources.files("src") / "py.typed"
+        marker = resources.files("reliadl") / "py.typed"
         self.assertTrue(marker.is_file(), "py.typed marker is missing")
 
     def test_package_data_declares_both_files(self) -> None:

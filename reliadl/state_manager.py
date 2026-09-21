@@ -12,12 +12,12 @@ import shutil
 from pathlib import Path
 from typing import Optional, Union
 
-from src.exceptions import (
+from reliadl.exceptions import (
     StateCorruptedError,
     StateNotFoundError,
     StorageError,
 )
-from src.models import (
+from reliadl.models import (
     ChunkState,
     ChunkStatus,
     DownloadState,

@@ -10,14 +10,14 @@ from __future__ import annotations
 import threading
 import unittest
 
-from src.algorithms.adaptive_chunker import (
+from reliadl.algorithms.adaptive_chunker import (
     DEFAULT_CHUNK_SIZE,
     BLDCSController,
     DynamicChunkPlanner,
 )
-from src.algorithms.metrics_collector import NetworkStateSnapshot
-from src.exceptions import ConfigurationError
-from src.models import ChunkSpec
+from reliadl.algorithms.metrics_collector import NetworkStateSnapshot
+from reliadl.exceptions import ConfigurationError
+from reliadl.models import ChunkSpec
 
 MB = 1024 * 1024
 

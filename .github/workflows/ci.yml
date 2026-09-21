@@ -39,11 +39,11 @@ jobs:
 
       - name: Check Code Syntax & Format (Ruff)
         run: |
-          ruff check --select=E,F --ignore=E501 src/ tests/
+          ruff check --select=E,F --ignore=E501 reliadl/ tests/
 
       - name: Type Checking (MyPy)
         run: |
-          mypy src/ --ignore-missing-imports || true
+          mypy reliadl/ --ignore-missing-imports || true
 
   test-matrix:
     name: Test Matrix (Python ${{ matrix.python-version }} on ${{ matrix.os }})
@@ -73,7 +73,7 @@ jobs:
 
       - name: Run Test Suite with Pytest
         run: |
-          python -m pytest --cov=src --cov-report=xml --cov-report=term
+          python -m pytest --cov=reliadl --cov-report=xml --cov-report=term
 
       - name: Upload Test Coverage Artifact
         if: matrix.python-version == '3.12' && matrix.os == 'ubuntu-latest'

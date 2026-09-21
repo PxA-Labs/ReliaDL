@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 import unittest
 
-from src.algorithms.work_stealer import (
+from reliadl.algorithms.work_stealer import (
     DEFAULT_MIN_SPLIT_BYTES,
     DEFAULT_STRAGGLER_FACTOR,
     StragglerDetector,
@@ -19,7 +19,7 @@ from src.algorithms.work_stealer import (
     StragglerVerdict,
     WorkerProgress,
 )
-from src.exceptions import ConfigurationError
+from reliadl.exceptions import ConfigurationError
 
 MB = 1024 * 1024
 

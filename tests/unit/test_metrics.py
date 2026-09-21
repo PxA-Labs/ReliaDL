@@ -17,8 +17,8 @@ import urllib.error
 import urllib.request
 from typing import List
 
-from src.exceptions import ConfigurationError
-from src.telemetry.metrics import (
+from reliadl.exceptions import ConfigurationError
+from reliadl.telemetry.metrics import (
     CONTENT_TYPE,
     DEFAULT_DURATION_BUCKETS,
     DEFAULT_THROUGHPUT_BUCKETS,

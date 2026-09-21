@@ -12,12 +12,12 @@ import os
 from pathlib import Path
 from typing import Callable, Optional, Union
 
-from src.exceptions import (
+from reliadl.exceptions import (
     AssemblyFailedError,
     FileHashMismatchError,
     StorageError,
 )
-from src.models import (
+from reliadl.models import (
     DownloadState,
 )
 

@@ -14,7 +14,7 @@ import threading
 import unittest
 from typing import List
 
-from src.algorithms.mirror_bandit import (
+from reliadl.algorithms.mirror_bandit import (
     DEFAULT_COOLDOWN_SECONDS,
     DEFAULT_FAILURE_THRESHOLD,
     DEFAULT_MIN_PEAK_SAMPLE_BYTES,
@@ -25,7 +25,7 @@ from src.algorithms.mirror_bandit import (
     MirrorReward,
     MirrorStats,
 )
-from src.exceptions import ConfigurationError
+from reliadl.exceptions import ConfigurationError
 
 MB = 1024 * 1024
 MIRRORS = ["fast", "slow", "dead"]

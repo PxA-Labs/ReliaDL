@@ -28,7 +28,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Mapping, Optional, Tuple
 
-from src.exceptions import ConfigurationError
+from reliadl.exceptions import ConfigurationError
 
 
 def format_range_header(start_byte: int, end_byte: int) -> str:

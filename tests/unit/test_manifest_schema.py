@@ -10,14 +10,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.exceptions import ManifestError, ManifestFormatError
-from src.manifest import (
+from reliadl.exceptions import ManifestError, ManifestFormatError
+from reliadl.manifest import (
     dump_manifest,
     load_manifest,
     parse_manifest_json,
     validate_manifest_dict,
 )
-from src.models import ChunkSpec
+from reliadl.models import ChunkSpec
 
 
 def _make_sample_manifest_dict() -> dict:

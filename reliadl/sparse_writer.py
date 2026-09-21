@@ -18,14 +18,14 @@ import threading
 from pathlib import Path
 from typing import Any, Optional, Union
 
-from src.exceptions import (
+from reliadl.exceptions import (
     AllocationError,
     DiskFullError,
     FileHashMismatchError,
     StorageError,
     StoragePermissionError,
 )
-from src.models import ChunkSpec
+from reliadl.models import ChunkSpec
 
 # macOS (Darwin) constant for F_PREALLOCATE
 _DARWIN_F_PREALLOCATE = 42

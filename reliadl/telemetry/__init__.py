@@ -7,7 +7,7 @@ anything about how it is collected.
 
 from __future__ import annotations
 
-from src.telemetry.metrics import (
+from reliadl.telemetry.metrics import (
     DEFAULT_DURATION_BUCKETS,
     DEFAULT_THROUGHPUT_BUCKETS,
     Counter,

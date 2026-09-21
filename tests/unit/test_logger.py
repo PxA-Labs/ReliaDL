@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.logger import (
+from reliadl.logger import (
     configure_logger,
     get_logger,
     redact_credentials,

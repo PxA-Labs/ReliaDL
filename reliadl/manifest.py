@@ -21,14 +21,14 @@ from cryptography.hazmat.primitives.asymmetric import ed25519, padding, rsa
 from jsonschema.validators import Draft202012Validator
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from src.exceptions import (
+from reliadl.exceptions import (
     ChunkHashMismatchError,
     ManifestError,
     ManifestFormatError,
     ManifestSignatureMismatchError,
     SubBlockCorruptedError,
 )
-from src.models import ChunkSpec
+from reliadl.models import ChunkSpec
 
 # ─────────────────────────────────────────────────────────────────────────────
 # JSON Schema Definition (Draft 2020-12)

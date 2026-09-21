@@ -53,8 +53,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Generic, List, Optional, TypeVar
 
-from src.algorithms.adaptive_chunker import is_power_of_two
-from src.exceptions import ConfigurationError
+from reliadl.algorithms.adaptive_chunker import is_power_of_two
+from reliadl.exceptions import ConfigurationError
 
 T = TypeVar("T")
 

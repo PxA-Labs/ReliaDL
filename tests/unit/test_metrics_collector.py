@@ -11,7 +11,7 @@ import statistics
 import threading
 import unittest
 
-from src.algorithms.metrics_collector import (
+from reliadl.algorithms.metrics_collector import (
     DEFAULT_FAILURE_WINDOW_SIZE,
     DEFAULT_RTT_ALPHA,
     DEFAULT_THROUGHPUT_BETA,
@@ -21,7 +21,7 @@ from src.algorithms.metrics_collector import (
     NetworkStateSnapshot,
     TransferSample,
 )
-from src.exceptions import ConfigurationError
+from reliadl.exceptions import ConfigurationError
 
 
 class TestEWMAEstimator(unittest.TestCase):

@@ -20,7 +20,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Deque, Optional
 
-from src.exceptions import ConfigurationError
+from reliadl.exceptions import ConfigurationError
 
 # EWMA smoothing factor for round-trip time (higher = faster adaptation).
 DEFAULT_RTT_ALPHA = 0.2

@@ -60,9 +60,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-from src.algorithms.adaptive_chunker import MIN_CHUNK_SIZE
-from src.exceptions import ConfigurationError
-from src.models import ChunkSpec
+from reliadl.algorithms.adaptive_chunker import MIN_CHUNK_SIZE
+from reliadl.exceptions import ConfigurationError
+from reliadl.models import ChunkSpec
 
 # Multiple of the fastest active peer's TTC beyond which a worker is a
 # straggler. Chosen well above 1 so ordinary throughput jitter between healthy

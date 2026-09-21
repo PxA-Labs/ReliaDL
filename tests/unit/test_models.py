@@ -10,7 +10,7 @@ from dataclasses import FrozenInstanceError
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src.models import (
+from reliadl.models import (
     ChunkResult,
     ChunkSpec,
     ChunkState,

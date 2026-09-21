@@ -15,14 +15,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from src.exceptions import (
+from reliadl.exceptions import (
     AllocationError,
     DiskFullError,
     FileHashMismatchError,
     StorageError,
 )
-from src.models import ChunkSpec
-from src.sparse_writer import (
+from reliadl.models import ChunkSpec
+from reliadl.sparse_writer import (
     AllocationStrategy,
     SparseFileWriter,
     _normalize_hex_hash,

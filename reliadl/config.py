@@ -14,8 +14,8 @@ from typing import Any, Optional, Union
 
 import yaml
 
-from src.exceptions import ConfigurationError
-from src.models import DownloadConfig
+from reliadl.exceptions import ConfigurationError
+from reliadl.models import DownloadConfig
 
 # Filename of the defaults shipped inside the package. It lives beside this
 # module rather than in a repository-level directory because a directory
