@@ -1,0 +1,21 @@
+{
+  "version": "0.3.0",
+  "description": "Production-grade fault-tolerant parallel file downloader with per-chunk SHA-256 verification.",
+  "homepage": "https://github.com/PxA-Labs/ReliaDL",
+  "license": "Apache-2.0",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/PxA-Labs/ReliaDL/releases/download/v0.3.0/reliadl-windows-amd64.exe#/reliadl.exe",
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bin": "reliadl.exe"
+    }
+  },
+  "checkver": "github",
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/PxA-Labs/ReliaDL/releases/download/v$version/reliadl-windows-amd64.exe#/reliadl.exe"
+      }
+    }
+  }
+}

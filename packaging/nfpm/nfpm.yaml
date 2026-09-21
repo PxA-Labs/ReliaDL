@@ -1,0 +1,43 @@
+# nFPM configuration for ReliaDL (Linux DEB and RPM packaging)
+# Reference: https://nfpm.goreleaser.com/configuration/
+
+name: "reliadl"
+arch: "${ARCH}"
+platform: "linux"
+version: "${VERSION}"
+section: "utils"
+priority: "optional"
+maintainer: "PxA-Labs Maintainers <maintainers@pxalabs.com>"
+description: "Production-grade fault-tolerant parallel file downloader with per-chunk SHA-256 verification"
+vendor: "PxA-Labs"
+homepage: "https://github.com/PxA-Labs/ReliaDL"
+license: "Apache-2.0"
+
+contents:
+  - src: "${BINARY_PATH}"
+    dst: "/usr/bin/reliadl"
+    file_info:
+      mode: 0755
+  - src: "LICENSE"
+    dst: "/usr/share/doc/reliadl/copyright"
+    file_info:
+      mode: 0644
+  - src: "README.md"
+    dst: "/usr/share/doc/reliadl/README.md"
+    file_info:
+      mode: 0644
+  - src: "docs/CHANGELOG.md"
+    dst: "/usr/share/doc/reliadl/changelog.md"
+    file_info:
+      mode: 0644
+
+deb:
+  compression: "xz"
+  fields:
+    Recommends: "ca-certificates"
+    Suggests: "openssl"
+
+rpm:
+  compression: "gzip"
+  group: "Applications/Internet"
+  summary: "Fault-tolerant parallel file download framework"
