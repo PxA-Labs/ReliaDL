@@ -71,7 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: [amd64, arm64]
+        arch: [amd64]
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
@@ -116,11 +116,18 @@ jobs:
         env:
           ARCH: ${{ matrix.arch }}
           VERSION: ${{ steps.vars.outputs.version }}
-          BINARY_PATH: "dist/reliadl-linux-${{ matrix.arch }}"
+          BINARY_PATH: dist/reliadl-linux-${{ matrix.arch }}
         run: |
           mkdir -p packages
+          python3 -c "
+          import os
+          content = open('packaging/nfpm/nfpm.yaml').read()
+          for k, v in [('\${ARCH}', os.environ['ARCH']), ('\${VERSION}', os.environ['VERSION']), ('\${BINARY_PATH}', os.environ['BINARY_PATH'])]:
+              content = content.replace(k, v)
+          open('/tmp/nfpm_deb.yaml', 'w').write(content)
+          "
           nfpm package \
-            --config packaging/nfpm/nfpm.yaml \
+            --config /tmp/nfpm_deb.yaml \
             --packager deb \
             --target "packages/reliadl_${VERSION}_${{ matrix.arch }}.deb"
           ls -lh packages/
@@ -129,12 +136,19 @@ jobs:
         env:
           ARCH: ${{ matrix.arch == 'amd64' && 'x86_64' || 'aarch64' }}
           VERSION: ${{ steps.vars.outputs.version }}
-          BINARY_PATH: "dist/reliadl-linux-${{ matrix.arch }}"
+          BINARY_PATH: dist/reliadl-linux-${{ matrix.arch }}
         run: |
           mkdir -p packages
           RPM_ARCH="${{ matrix.arch == 'amd64' && 'x86_64' || 'aarch64' }}"
+          python3 -c "
+          import os
+          content = open('packaging/nfpm/nfpm.yaml').read()
+          for k, v in [('\${ARCH}', os.environ['ARCH']), ('\${VERSION}', os.environ['VERSION']), ('\${BINARY_PATH}', os.environ['BINARY_PATH'])]:
+              content = content.replace(k, v)
+          open('/tmp/nfpm_rpm.yaml', 'w').write(content)
+          "
           nfpm package \
-            --config packaging/nfpm/nfpm.yaml \
+            --config /tmp/nfpm_rpm.yaml \
             --packager rpm \
             --target "packages/reliadl-${VERSION}-1.${RPM_ARCH}.rpm"
           ls -lh packages/
