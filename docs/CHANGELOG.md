@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **release**: Add dedicated release log file and release log generator script
 - **agents**: Enforce archittmittal-only GitHub account rule
 
+### Maintenance & Dependencies
+- **deps**: Update mkdocs-material requirement from >=9.5.0 to >=9.7.7
+
 ### Changed
 - **v0.3.0**: Update documentation for v0.3.0 release and standardize formatting (#106)
 - **cli**: Add comprehensive CLI guide documentation (#108)
