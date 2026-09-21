@@ -1,0 +1,178 @@
+name: Standalone CLI Executables — Build, Sign & Attach to Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build only — do not upload to release (true/false)'
+        required: true
+        default: 'true'
+
+permissions:
+  contents: write       # upload release assets
+  id-token: write       # Sigstore / OIDC signing
+  attestations: write   # build provenance attestations
+
+jobs:
+  # ── Per-platform binary builds ────────────────────────────────────────────
+  build-binary:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── Linux amd64 ───────────────────────────────────────────────────
+          - runner: ubuntu-latest
+            target: reliadl-linux-amd64
+            python: '3.12'
+            os: linux
+
+          # ── macOS Apple Silicon (arm64) ────────────────────────────────
+          - runner: macos-latest
+            target: reliadl-darwin-arm64
+            python: '3.12'
+            os: darwin
+
+          # ── macOS Intel (amd64) ───────────────────────────────────────
+          - runner: macos-13
+            target: reliadl-darwin-amd64
+            python: '3.12'
+            os: darwin
+
+          # ── Windows amd64 ─────────────────────────────────────────────
+          - runner: windows-latest
+            target: reliadl-windows-amd64.exe
+            python: '3.12'
+            os: windows
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: 'pip'
+
+      - name: Install runtime dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build standalone binary
+        shell: bash
+        run: python scripts/build_binary.py --output-name "${{ matrix.target }}"
+
+      - name: Smoke-test binary (Unix)
+        if: matrix.os != 'windows'
+        shell: bash
+        run: |
+          chmod +x "dist/${{ matrix.target }}"
+          "dist/${{ matrix.target }}" --help
+          echo "Exit code: $?"
+
+      - name: Smoke-test binary (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          & "dist\${{ matrix.target }}" --help
+          Write-Host "Exit code: $LASTEXITCODE"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: |
+            dist/${{ matrix.target }}
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
+
+  # ── Collect all binaries, generate SHA256SUMS, sign, and attach ───────────
+  release-assets:
+    name: Generate Checksums, Sign & Attach to Release
+    runs-on: ubuntu-latest
+    needs: build-binary
+    if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.dry_run == 'false'
+
+    steps:
+      - name: Download all binary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          pattern: binary-*
+          merge-multiple: true
+
+      - name: List downloaded assets
+        run: ls -lh dist/
+
+      - name: Generate consolidated SHA256SUMS
+        working-directory: dist
+        run: |
+          # Remove per-platform partial SHA256SUMS; generate one canonical file
+          rm -f SHA256SUMS
+          sha256sum reliadl-linux-amd64 \
+                    reliadl-darwin-arm64 \
+                    reliadl-darwin-amd64 \
+                    reliadl-windows-amd64.exe \
+            | tee SHA256SUMS
+          echo "SHA256SUMS generated:"
+          cat SHA256SUMS
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign binaries with Sigstore / Cosign (keyless OIDC)
+        shell: bash
+        run: |
+          cd dist
+          for binary in reliadl-linux-amd64 reliadl-darwin-arm64 reliadl-darwin-amd64 reliadl-windows-amd64.exe; do
+            if [ -f "$binary" ]; then
+              echo "Signing $binary …"
+              cosign sign-blob \
+                --yes \
+                --output-certificate "${binary}.crt" \
+                --output-signature  "${binary}.sig" \
+                "$binary"
+              echo "Signed: $binary"
+            fi
+          done
+
+      - name: Generate build provenance attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/reliadl-linux-amd64
+            dist/reliadl-darwin-arm64
+            dist/reliadl-darwin-amd64
+            dist/reliadl-windows-amd64.exe
+            dist/SHA256SUMS
+
+      - name: Attach all assets to GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            dist/reliadl-linux-amd64
+            dist/reliadl-darwin-arm64
+            dist/reliadl-darwin-amd64
+            dist/reliadl-windows-amd64.exe
+            dist/SHA256SUMS
+            dist/reliadl-linux-amd64.crt
+            dist/reliadl-linux-amd64.sig
+            dist/reliadl-darwin-arm64.crt
+            dist/reliadl-darwin-arm64.sig
+            dist/reliadl-darwin-amd64.crt
+            dist/reliadl-darwin-amd64.sig
+            dist/reliadl-windows-amd64.exe.crt
+            dist/reliadl-windows-amd64.exe.sig
+          generate_release_notes: false   # release.yml already does this
+          fail_on_unmatched_files: false  # sigs may not exist on dry runs
