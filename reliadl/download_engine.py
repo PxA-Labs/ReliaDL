@@ -549,8 +549,8 @@ class DownloadEngine:
         self._state_manager.delete(state_path)
         try:
             state_path.parent.rmdir()  # only succeeds when no other session uses it
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.debug("download.cleanup_state_dir_failed", path=str(state_path.parent), error=str(exc))
         state.status = DownloadStatus.COMPLETE
         self._emit_progress(force=True)
 
