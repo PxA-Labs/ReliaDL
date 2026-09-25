@@ -581,3 +581,32 @@ class AssemblyFailedError(AssemblyError):
         self.reason = reason
         self.missing_chunks = missing_chunks or []
         super().__init__(message, context=ctx, **kwargs)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Download Session Hierarchy
+# ─────────────────────────────────────────────────────────────────────────────
+
+class RangeNotSupportedError(NetworkError):
+    """Raised when the origin cannot serve byte ranges or does not report a file size."""
+
+    default_retryable: bool = False
+
+
+class DownloadCancelledError(ReliaDLError):
+    """Raised when a download is interrupted on request after its state has been saved."""
+
+    default_retryable: bool = False
+
+    def __init__(
+        self,
+        message: str,
+        state_file: Optional[str] = None,
+        context: Optional[dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> None:
+        ctx = context.copy() if context else {}
+        if state_file is not None:
+            ctx["state_file"] = state_file
+        self.state_file = state_file
+        super().__init__(message, context=ctx, **kwargs)

@@ -56,6 +56,7 @@ from reliadl.exceptions import (
     ConfigurationError,
     ConnectionError,
     DiskFullError,
+    DownloadCancelledError,
     FileHashMismatchError,
     HTTPError,
     IntegrityError,
@@ -68,6 +69,7 @@ from reliadl.exceptions import (
     ProxyAuthenticationError,
     ProxyConnectionError,
     ProxyError,
+    RangeNotSupportedError,
     ReliaDLError,
     ServerError,
     StateCorruptedError,
@@ -77,6 +79,11 @@ from reliadl.exceptions import (
     StoragePermissionError,
     SubBlockCorruptedError,
     TimeoutError,
+)
+from reliadl.download_engine import (
+    DownloadEngine,
+    RemoteFileInfo,
+    plan_chunks,
 )
 from reliadl.file_assembler import (
     DEFAULT_ASSEMBLY_BUFFER_SIZE,
@@ -189,6 +196,12 @@ __all__ = [
     "StateCorruptedError",
     "AssemblyError",
     "AssemblyFailedError",
+    "RangeNotSupportedError",
+    "DownloadCancelledError",
+    # Download Engine
+    "DownloadEngine",
+    "RemoteFileInfo",
+    "plan_chunks",
     # Config
     "parse_size",
     "format_size",

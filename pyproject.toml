@@ -28,8 +28,13 @@ dependencies = [
     "PyYAML>=6.0.3",
     "structlog>=26.1.0",
     "jsonschema>=4.26.0",
-    "cryptography>=50.0.1"
+    "cryptography>=50.0.1",
+    "httpx>=0.28.1"
 ]
+
+[project.optional-dependencies]
+http2 = ["httpx[http2]>=0.28.1"]
+socks = ["httpx[socks]>=0.28.1"]
 
 [project.scripts]
 reliadl = "reliadl.cli:main"
