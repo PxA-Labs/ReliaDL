@@ -8,21 +8,26 @@ telemetry stats monitoring, and high-throughput network benchmarking.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import platform
+import signal
 import sys
 import time
 import urllib.request
 import urllib.error
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Any, Awaitable, Callable, Optional, Sequence
 
 from reliadl.adapters.proxy_adapter import ProxyConfig, ProxyTunnel
-from reliadl.config import format_size
+from reliadl.config import format_size, get_download_config
+from reliadl.download_engine import DownloadEngine
+from reliadl.exceptions import DownloadCancelledError, ReliaDLError
 from reliadl.hash_verifier import StreamingHashVerifier, compute_file_hash, constant_time_compare
 from reliadl.logger import configure_logger, get_logger
 from reliadl.manifest import BinaryMerkleTree, compute_merkle_root, load_manifest
+from reliadl.models import DownloadConfig, DownloadResult, ProgressReport
 from reliadl.state_manager import StateManager
 
 logger = get_logger("reliadl.cli")
@@ -478,6 +483,85 @@ def run_hash_tree(args: argparse.Namespace) -> int:
 # Core Commands: Download, Resume, Verify
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _engine_config(args: argparse.Namespace) -> DownloadConfig:
+    """Load the layered YAML/env configuration with command-line overrides on top."""
+    download: dict[str, Any] = {}
+    network: dict[str, Any] = {}
+    if getattr(args, "workers", None) is not None:
+        download["max_parallel_workers"] = args.workers
+    if getattr(args, "chunk_size", None) is not None:
+        download["chunk_size"] = args.chunk_size
+    if getattr(args, "limit_rate", None) is not None:
+        network["max_bandwidth"] = args.limit_rate
+    return get_download_config(
+        config_path=getattr(args, "config", None),
+        overrides={"download": download, "network": network},
+    )
+
+
+def _print_progress(report: ProgressReport) -> None:
+    """Render a single self-overwriting progress line on an interactive stderr."""
+    eta = report.estimated_remaining_seconds
+    line = (
+        f"\r{report.percentage:6.2f}%  "
+        f"{format_size(report.downloaded_bytes)} / {format_size(report.total_bytes)}  "
+        f"{format_size(int(report.current_speed_bps))}/s  "
+        f"chunks {report.chunks_complete}/{report.total_chunks}  "
+        f"ETA {f'{eta:.0f}s' if eta is not None else '--'}   "
+    )
+    sys.stderr.write(line)
+    sys.stderr.flush()
+
+
+def _run_engine_session(
+    engine: DownloadEngine,
+    session: Callable[[], Awaitable[DownloadResult]],
+) -> int:
+    """Run a download session, turning SIGINT/SIGTERM into a checkpointed stop."""
+
+    async def runner() -> DownloadResult:
+        loop = asyncio.get_running_loop()
+        installed = []
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(sig, engine.request_shutdown)
+                installed.append(sig)
+            except (NotImplementedError, RuntimeError, ValueError):
+                # Windows event loops have no signal handlers; Ctrl+C there
+                # cancels the session task, which checkpoints the same way.
+                pass
+        try:
+            return await session()
+        finally:
+            for sig in installed:
+                loop.remove_signal_handler(sig)
+
+    try:
+        result = asyncio.run(runner())
+    except DownloadCancelledError as err:
+        print(f"\n[INFO] {err.message}")
+        return 130
+    except KeyboardInterrupt:
+        print("\n[INFO] Download interrupted; state saved for 'reliadl resume'.")
+        return 130
+    except ReliaDLError as err:
+        print(f"\n[ERROR] {err.message}")
+        return 1
+    finally:
+        if sys.stderr.isatty():
+            sys.stderr.write("\n")
+
+    print(f"[SUCCESS] Saved {format_size(result.file_size)} to: {result.output_path}")
+    if result.file_hash:
+        status = "verified" if result.is_verified else "computed"
+        print(f"SHA-256 ({status}): {result.file_hash}")
+    print(
+        f"[INFO] {result.total_chunks} chunks in {result.elapsed_seconds:.2f}s "
+        f"({format_size(int(result.average_speed_bps))}/s, {result.chunks_retried} retried)"
+    )
+    return 0
+
+
 def run_download(args: argparse.Namespace) -> int:
     """Execute high-speed chunked parallel file download."""
     url = args.url
@@ -485,14 +569,14 @@ def run_download(args: argparse.Namespace) -> int:
     print(f"[INFO] Initiating parallel download from: {url}")
     print(f"[INFO] Target output path: {output}")
 
-    output.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        config = _engine_config(args)
+    except (ReliaDLError, ValueError) as err:
+        print(f"[ERROR] Invalid configuration: {err}")
+        return 1
 
-    # Perform lightweight download initialization
-    state_mgr = StateManager(output)
-    state_mgr.initialize(file_size_bytes=1024 * 1024, chunk_size_bytes=256 * 1024)
-
-    print(f"[SUCCESS] Download target initialized cleanly at: {output}")
-    return 0
+    engine = DownloadEngine(config, progress_callback=_print_progress if sys.stderr.isatty() else None)
+    return _run_engine_session(engine, lambda: engine.download(url, output, expected_hash=args.expected_hash))
 
 
 def run_resume(args: argparse.Namespace) -> int:
@@ -502,7 +586,15 @@ def run_resume(args: argparse.Namespace) -> int:
         print(f"[ERROR] State file not found: {state_file}")
         return 1
     print(f"[INFO] Resuming transfer session from state file: {state_file}")
-    return 0
+
+    try:
+        config = _engine_config(args)
+    except (ReliaDLError, ValueError) as err:
+        print(f"[ERROR] Invalid configuration: {err}")
+        return 1
+
+    engine = DownloadEngine(config, progress_callback=_print_progress if sys.stderr.isatty() else None)
+    return _run_engine_session(engine, lambda: engine.resume(state_file))
 
 
 def run_verify(args: argparse.Namespace) -> int:
@@ -531,6 +623,14 @@ def run_verify(args: argparse.Namespace) -> int:
 # CLI Parser Definition & Main Dispatcher
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _add_engine_arguments(parser: argparse.ArgumentParser) -> None:
+    """Options shared by the commands that drive the download engine."""
+    parser.add_argument("--workers", "-j", type=int, help="Parallel connections (1-32, default from config: 4)")
+    parser.add_argument("--chunk-size", help="Chunk size, e.g. 8MB (1MB-256MB)")
+    parser.add_argument("--limit-rate", help="Bandwidth cap per second, e.g. 10MB (0 = unlimited)")
+    parser.add_argument("--config", help="Path to a ReliaDL YAML configuration file")
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Construct argument parser for ReliaDL CLI."""
     parser = argparse.ArgumentParser(
@@ -548,10 +648,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_dl.add_argument("--output", "-o", required=True, help="Output file path")
     p_dl.add_argument("--adachunk", action="store_true", help="Enable AdaChunk dynamic chunk optimization")
     p_dl.add_argument("--whittle", action="store_true", help="Enable Whittle index mirror bandit scheduling")
+    p_dl.add_argument("--expected-hash", "--sha256", dest="expected_hash", help="Expected SHA-256 of the whole file")
+    _add_engine_arguments(p_dl)
 
     # Core: resume
     p_res = subparsers.add_parser("resume", help="Resume interrupted transfer session")
     p_res.add_argument("--state-file", required=True, help="Path to .state file")
+    _add_engine_arguments(p_res)
 
     # Core: verify
     p_ver = subparsers.add_parser("verify", help="Verify payload SHA-256 hash digest")

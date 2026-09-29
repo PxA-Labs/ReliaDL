@@ -66,6 +66,17 @@ reliadl download --url URL --output OUTPUT_PATH [OPTIONS]
 | `--output`, `-o` | Yes | Target destination file path |
 | `--adachunk` | No | Enable dynamic AdaChunk Lyapunov chunk size optimization |
 | `--whittle` | No | Enable Whittle index multi-armed bandit mirror scheduling |
+| `--expected-hash`, `--sha256` | No | Expected SHA-256 of the whole file; the download fails if it does not match |
+| `--workers`, `-j` | No | Parallel connections, 1–32 (default: `download.max_parallel_workers`, 4) |
+| `--chunk-size` | No | Chunk size such as `8MB`, 1MB–256MB (default: `download.chunk_size`) |
+| `--limit-rate` | No | Bandwidth cap per second such as `10MB`; `0` is unlimited |
+| `--config` | No | Path to a ReliaDL YAML configuration file |
+
+**How it works**: the server is probed with `HEAD` (or a one-byte range `GET` if `HEAD` is refused) for its size, `Accept-Ranges`, and `ETag`. The file is split into chunks, and a pool of workers fetches them concurrently with `Range` requests, retrying transient failures (timeouts, resets, 429, 5xx) with exponential backoff. Bytes are written straight into a pre-allocated `<output>.part` file and each chunk is SHA-256 hashed as it streams. After every chunk completes, the session is checkpointed to `.ReliaDL/<name>.state` next to the output. When all chunks are done the whole file is hashed and `<output>.part` is renamed to the output path.
+
+Servers that do not support byte ranges are rejected for now; single-stream fallback is tracked in #42.
+
+**Interrupting**: `Ctrl+C` (or `SIGTERM`) stops the transfer, saves the checkpoint, prints the `resume` command, and exits with status `130`.
 
 **Example**:
 ```bash
@@ -92,10 +103,13 @@ reliadl resume --state-file STATE_FILE_PATH
 | Parameter | Required | Description |
 |---|---|---|
 | `--state-file` | Yes | Absolute or relative path to `.state` checkpoint file |
+| `--workers`, `--chunk-size`, `--limit-rate`, `--config` | No | As for `download`; the chunk layout recorded in the state file is kept |
+
+Before continuing, the remote file is probed again: if its size or `ETag` has changed, the resume is refused. Every chunk the state file marks complete is re-hashed from `<output>.part`, and any that no longer match are downloaded again.
 
 **Example**:
 ```bash
-reliadl resume --state-file "./downloads/.reliadl/models_v2.tar.gz.state"
+reliadl resume --state-file "./downloads/.ReliaDL/models_v2.tar.gz.state"
 ```
 
 ---
