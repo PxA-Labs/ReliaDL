@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Maintenance & Dependencies
 - **deps**: Update mkdocs-material requirement from >=9.5.0 to >=9.7.7
+- **deps**: Bump actions/attest-build-provenance from 2 to 4
 
 ### Changed
 - **v0.3.0**: Update documentation for v0.3.0 release and standardize formatting (#106)
