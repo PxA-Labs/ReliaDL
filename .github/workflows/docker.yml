@@ -113,7 +113,7 @@ jobs:
 
     steps:
       - name: Download all platform digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: /tmp/digests
           pattern: digest-*
