@@ -29,10 +29,9 @@ from reliadl.logger import configure_logger, get_logger
 from reliadl.manifest import BinaryMerkleTree, compute_merkle_root, load_manifest
 from reliadl.models import DownloadConfig, DownloadResult, ProgressReport
 from reliadl.state_manager import StateManager
+from reliadl._version import __version__
 
 logger = get_logger("reliadl.cli")
-
-__version__ = "0.3.0"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

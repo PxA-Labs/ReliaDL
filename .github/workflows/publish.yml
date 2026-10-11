@@ -34,6 +34,14 @@ jobs:
       - name: Validate Package Metadata
         run: twine check dist/*
 
+      - name: Smoke-test Installed Wheel
+        run: |
+          python -m venv "$RUNNER_TEMP/reliadl-smoke"
+          "$RUNNER_TEMP/reliadl-smoke/bin/python" -m pip install dist/*.whl
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/reliadl-smoke/bin/python" "$GITHUB_WORKSPACE/scripts/verify_package.py"
+          "$RUNNER_TEMP/reliadl-smoke/bin/reliadl" --version
+
       - name: Generate Build Attestations
         uses: actions/attest-build-provenance@v4
         with:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reliadl"
-version = "0.3.0"
+dynamic = ["version"]
 description = "Production-grade, fault-tolerant parallel file downloader with per-chunk SHA-256 cryptographic verification."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -49,6 +49,9 @@ Discussions = "https://github.com/PxA-Labs/ReliaDL/discussions"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["reliadl*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "reliadl._version.__version__"}
 
 [tool.setuptools.package-data]
 reliadl = ["default_config.yaml", "py.typed"]

@@ -5,6 +5,7 @@ Fault-tolerant, high-throughput chunked download engine.
 
 from __future__ import annotations
 
+from reliadl._version import __version__
 from reliadl.config import (
     apply_env_overrides,
     deep_merge,
@@ -153,6 +154,8 @@ from reliadl.manifest import (
 )
 
 __all__ = [
+    # Package metadata
+    "__version__",
     # Enums & Models
     "ChunkStatus",
     "DownloadStatus",

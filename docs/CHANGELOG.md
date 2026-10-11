@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Features
+- **Download Engine**: Added the asynchronous HTTPX range engine with resumable checkpoints, retries, validators, positional writes, and package-level exports.
 - **ci**: Upgrade Conventional Commit changelog generator and add auto release log workflow ([#110](https://github.com/PxA-Labs/ReliaDL/pull/110))
 - **dist**: System package manager distribution (Homebrew, WinGet, Scoop, DEB, RPM)
 
@@ -27,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **deps**: Bump actions/attest-build-provenance from 2 to 4
 
 ### Changed
+- **Packaging**: Prepare the next release as `0.4.0`, align version metadata with the `reliadl` namespace, and add installed-wheel smoke verification.
 - **v0.3.0**: Update documentation for v0.3.0 release and standardize formatting (#106)
 - **cli**: Add comprehensive CLI guide documentation (#108)
 
@@ -119,4 +121,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Removed** — removed features
 - **Fixed** — bug fixes
 - **Security** — vulnerability fixes
-

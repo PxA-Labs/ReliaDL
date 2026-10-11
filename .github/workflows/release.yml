@@ -39,6 +39,14 @@ jobs:
         run: |
           python -m build
 
+      - name: Smoke-test Installed Wheel
+        run: |
+          python -m venv "$RUNNER_TEMP/reliadl-smoke"
+          "$RUNNER_TEMP/reliadl-smoke/bin/python" -m pip install dist/*.whl
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/reliadl-smoke/bin/python" "$GITHUB_WORKSPACE/scripts/verify_package.py"
+          "$RUNNER_TEMP/reliadl-smoke/bin/reliadl" --version
+
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v7
         with:
