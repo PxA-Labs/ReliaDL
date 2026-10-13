@@ -197,7 +197,7 @@ def run_one(scenario: Scenario, policy: Policy, seed: int, *, timeout: float = 3
             result.chunk_sizes = sorted({c.size for c in engine._state.chunks})
 
         total_written = 0
-        for mirror, profile in zip(mirrors, scenario.mirrors):
+        for mirror, profile in zip(mirrors, scenario.mirrors, strict=True):
             stats = mirror.stats
             total_written += stats.bytes_written
             result.requests += stats.ranged_requests

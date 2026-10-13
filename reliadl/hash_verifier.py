@@ -267,7 +267,7 @@ def verify_stream(
     if hasattr(stream, "read"):
         # File-like object
         while True:
-            chunk = stream.read(buffer_size)  # type: ignore[union-attr]
+            chunk = stream.read(buffer_size)
             if not chunk:
                 break
             verifier.update(chunk)

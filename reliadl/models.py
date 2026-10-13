@@ -660,8 +660,14 @@ if _HAS_PYDANTIC:
                 )
             return self
 
-        def validate(self) -> None:
-            """Validate configuration values. Raises ValueError on invalid values."""
+        def validate(self) -> None:  # type: ignore[override]
+            """
+            Validate configuration values. Raises ValueError on invalid values.
+
+            Deliberately shadows pydantic's deprecated classmethod of the same
+            name so that both DownloadConfig variants -- this one and the
+            dataclass fallback below -- present one interface to callers.
+            """
             self.model_validate(self.model_dump())
 
         def to_dict(self) -> dict[str, Any]:
@@ -675,7 +681,7 @@ if _HAS_PYDANTIC:
 
 else:
     @dataclass
-    class DownloadConfig:
+    class DownloadConfig:  # type: ignore[no-redef]
         """
         Configuration dataclass providing typing and boundary validation.
         Fallback implementation for environments where pydantic is not installed.

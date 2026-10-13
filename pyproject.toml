@@ -52,3 +52,61 @@ include = ["reliadl*"]
 
 [tool.setuptools.package-data]
 reliadl = ["default_config.yaml", "py.typed"]
+
+# ── Development tooling ──────────────────────────────────────────────────────
+# These sections exist so CI and a local checkout enforce the same rules. CI
+# previously passed flags inline and ended both mypy and pip-audit with
+# `|| true`, which meant neither could ever fail a build: a CLI subcommand
+# calling a method that does not exist shipped and stayed broken.
+
+[project.optional-dependencies.dev]
+# Declared so `pip install -e .[dev]` reproduces CI locally.
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "ASYNC"]
+ignore = [
+    "E501",    # line length is enforced by the formatter, not the linter
+    "B008",    # function call in argument default; used deliberately for factories
+    "B904",    # `raise ... from err`: worth doing, but 31 pre-existing sites.
+               # Tracked separately rather than bulk-edited under a lint flag.
+]
+
+[tool.ruff.lint.per-file-ignores]
+# One-time setup at the top of a download: Path.resolve() and is_file() are
+# single stat calls before any worker starts, not hot-path I/O.
+"reliadl/download_engine.py" = ["ASYNC240"]
+# Tests assert, construct throwaway paths, and reach into internals on purpose.
+# Tests deliberately assert on broad exceptions where the point is that *some*
+# error is raised, open files directly, and poll with sleep in helpers.
+"tests/**" = ["B011", "B017", "B905", "ASYNC110", "ASYNC230", "ASYNC240"]
+"benchmarks/**" = ["ASYNC240"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+files = ["reliadl"]
+# Not strict yet. The baseline is "no errors", enforced in CI, so new code cannot
+# add any; tightening further is a separate piece of work.
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[tool.coverage.run]
+source = ["reliadl"]
+branch = true
+omit = ["reliadl/__main__.py"]
+
+[tool.coverage.report]
+# Set just under the measured value so the gate catches regressions without
+# failing the build on noise. Raise it as coverage improves; never lower it to
+# make a build pass.
+fail_under = 85
+show_missing = true
+skip_covered = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error::DeprecationWarning:reliadl.*"]

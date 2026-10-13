@@ -34,7 +34,11 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 from urllib.parse import urlsplit
 
-from reliadl.algorithms.adaptive_chunker import BLDCSController, DynamicChunkPlanner
+from reliadl.algorithms.adaptive_chunker import (
+    MIN_CHUNK_SIZE,
+    BLDCSController,
+    DynamicChunkPlanner,
+)
 from reliadl.algorithms.metrics_collector import (
     NetworkMetricsCollector,
     NetworkStateSnapshot,
@@ -45,7 +49,7 @@ from reliadl.algorithms.mirror_bandit import (
     MirrorDispatcher,
     MirrorEndpoint,
 )
-from reliadl.models import ChunkState
+from reliadl.models import ChunkSpec, ChunkState
 
 # How many chunks to plan per refill when sizing adaptively. Planning one at a
 # time would consult the controller for every request, which is cheap, but it
@@ -104,6 +108,7 @@ class TransferScheduler:
         mirrors: Sequence[str] = (),
         hash_algorithm: str = "sha256",
         plan_batch: int = DEFAULT_PLAN_BATCH,
+        workers: int = 1,
         seed: Optional[int] = None,
     ) -> None:
         self._origin_url = origin_url
@@ -111,6 +116,7 @@ class TransferScheduler:
         self._fixed_chunk_size = fixed_chunk_size
         self._adaptive_chunks = bool(adaptive_chunk_sizing)
         self._plan_batch = max(1, plan_batch)
+        self._workers = max(1, workers)
         self._lock = threading.RLock()
 
         # The collector is always created: the mirror router and the chunk sizer
@@ -196,6 +202,7 @@ class TransferScheduler:
                 spec = self._planner.next_chunk(effective)
                 if spec is None:
                     break
+                spec = self._apply_concurrency_floor(spec)
                 planned.append(
                     ChunkState(
                         index=spec.index,
@@ -204,6 +211,48 @@ class TransferScheduler:
                     )
                 )
         return planned
+
+    def _apply_concurrency_floor(self, spec: ChunkSpec) -> ChunkSpec:
+        """
+        Shrink a chunk that would starve the worker pool.
+
+        The BL-DCS cost model, `tau*mu/S + p_seg*S/MSS`, describes a single
+        sequential stream: it trades per-request overhead against bytes lost to a
+        failed request, and concludes that a clean fast path should use very large
+        chunks. Nothing in it mentions concurrency.
+
+        That omission dominates in practice. Aggregate throughput here is
+        (workers in flight) x (per-connection rate), so a chunk large enough that
+        fewer than `workers` of them remain leaves workers idle, and the
+        parallelism lost costs far more than the request overhead saved. Measured
+        on a clean bandwidth-capped origin, the unconstrained controller grew
+        chunks to 32 MB, left 9 chunks for 4 workers, and ran at 30 MB/s against
+        50 MB/s for fixed 4 MB chunks -- and on a mirror that degraded
+        mid-transfer, a single 32 MB chunk landing on the slow side took the
+        transfer to 3.6 MB/s against 8.6.
+
+        So the planner caps the chunk at `remaining / workers`: never larger than
+        the share each worker would need for all of them to stay busy. The cap
+        only ever shrinks a chunk, so the loss-driven lower bound the controller
+        computes is untouched -- this constrains the solution, it does not replace
+        the model.
+        """
+        if self._planner is None:
+            return spec
+        # remaining *including* this chunk, since it has already been issued
+        remaining = self._planner.remaining_bytes + spec.size
+        ceiling = max(MIN_CHUNK_SIZE, remaining // self._workers)
+        if spec.size <= ceiling:
+            return spec
+        shrunk = ChunkSpec(
+            index=spec.index,
+            start_byte=spec.start_byte,
+            end_byte=spec.start_byte + ceiling - 1,
+        )
+        # Rewind the planner so the bytes this chunk gave up are planned next,
+        # rather than silently dropped out of the partition.
+        self._planner.rewind_to(shrunk.end_byte + 1, spec.index + 1)
+        return shrunk
 
     def disable_planning(self) -> None:
         """

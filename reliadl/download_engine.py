@@ -456,6 +456,7 @@ class DownloadEngine:
             # pool would start partly idle and the first refill would be a
             # thundering herd of workers all finding an empty queue.
             plan_batch=max(DEFAULT_PLAN_BATCH, self._config.max_parallel_workers),
+            workers=self._config.max_parallel_workers,
         )
         if planned_through:
             scheduler.advance_to(planned_through)

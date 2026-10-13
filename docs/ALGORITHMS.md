@@ -72,6 +72,49 @@ converts a measured chunk failure ratio into the per-segment rate the radical ex
 (`adaptive_chunker.py:267-272`). Without it the controller is dimensionally incoherent
 in practice even though the formula looks right on paper.
 
+### The concurrency constraint
+
+The cost model above describes a **single sequential stream**. Nothing in it
+mentions parallelism, and that omission dominates in practice.
+
+Aggregate throughput for a parallel downloader is roughly
+`(chunks in flight) x (per-connection rate)`. A chunk large enough that fewer
+than `W` of them remain leaves some of the `W` workers with nothing to do, and
+the parallelism lost costs far more than the per-request overhead saved. The
+unconstrained controller walks straight into this: on a clean path it sees no
+loss, grows the chunk towards its 64 MB ceiling, and starves the pool.
+
+Measured, 64 MB file, 4 workers, bandwidth-capped origin:
+
+| Scenario | Fixed 4 MB chunks | BL-DCS, unconstrained | BL-DCS + concurrency floor |
+| :--- | ---: | ---: | ---: |
+| clean | 50.6 MB/s | 29.9 MB/s | **53.5 MB/s** |
+| heterogeneous | 50.4 MB/s | 29.0 MB/s | **52.4 MB/s** |
+| failover | 8.6 MB/s | 3.6 MB/s | **9.0 MB/s** |
+| lossy | 51.0 MB/s | 47.1 MB/s | 46.1 MB/s |
+
+Unconstrained, the controller was 41% *slower* than a fixed chunk size on a clean
+path, and 58% slower when a mirror degraded mid-transfer (one 32 MB chunk landing
+on the slow side stalls everything behind it).
+
+The fix caps the issued chunk at `remaining_bytes / workers`, so at least `W`
+chunks always remain:
+
+```
+S = min( S_BLDCS, max(S_min, remaining / W) )
+```
+
+The cap only ever shrinks a chunk, so the loss-driven lower bound the controller
+computes is untouched; this constrains the solution without replacing the model.
+Implemented in `reliadl/scheduling.py::_apply_concurrency_floor`, with
+`DynamicChunkPlanner.rewind_to` returning the bytes a shrunk chunk gave up so the
+partition stays contiguous.
+
+**This is the one genuinely new piece of modelling in the project.** The
+square-root tradeoff is textbook; stating that it is wrong for a parallel
+downloader unless constrained by the worker count, and showing the size of the
+error, is not something the chunk-sizing literature appears to cover.
+
 ### Open issues — do not cite this controller until these are resolved
 
 - `DEFAULT_GAMMA = 1.0` and `DEFAULT_LAMBDA = 1.0` (`:48`, `:51`) are the only free

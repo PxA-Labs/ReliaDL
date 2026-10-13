@@ -427,7 +427,7 @@ class EXP3Bandit:
     def probabilities(self) -> Dict[str, float]:
         """Current selection distribution over mirrors, summing to 1."""
         with self._lock:
-            return dict(zip(self._arms, self._distribution_locked()))
+            return dict(zip(self._arms, self._distribution_locked(), strict=True))
 
     def probability(self, arm: str) -> float:
         """Current selection probability of one mirror."""
@@ -447,13 +447,13 @@ class EXP3Bandit:
                 return {arm: 0.0 for arm in self._arms}
             return {
                 arm: math.exp(log_weight - total)
-                for arm, log_weight in zip(self._arms, self._log_weights)
+                for arm, log_weight in zip(self._arms, self._log_weights, strict=True)
             }
 
     def log_weights(self) -> Dict[str, float]:
         """Raw log weights, exposed for state persistence and diagnostics."""
         with self._lock:
-            return dict(zip(self._arms, self._log_weights))
+            return dict(zip(self._arms, self._log_weights, strict=True))
 
     def _require_arm(self, arm: str) -> int:
         """Resolve a mirror identifier to its position, or raise."""

@@ -122,7 +122,7 @@ class FileAssembler:
 
         try:
             with open(tmp_target, "wb") as out_f:
-                for chunk, c_path in zip(sorted_chunks, chunk_paths):
+                for chunk, c_path in zip(sorted_chunks, chunk_paths, strict=True):
                     file_size = c_path.stat().st_size
                     if file_size != chunk.size:
                         raise AssemblyFailedError(

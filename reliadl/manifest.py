@@ -13,7 +13,7 @@ import hashlib
 import hmac
 import json
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Optional, Sequence, Union
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
@@ -866,7 +866,7 @@ def hash_root(tree_root: bytes, leaf_count: int) -> bytes:
     return hashlib.sha256(b"" + leaf_count.to_bytes(8, "big") + tree_root).digest()
 
 
-def compute_merkle_root(chunk_hashes: list[Union[str, bytes]]) -> str:
+def compute_merkle_root(chunk_hashes: Sequence[Union[str, bytes]]) -> str:
     """
     Compute binary Merkle tree root hash from a sequence of chunk hashes.
 
@@ -894,7 +894,7 @@ class BinaryMerkleTree:
     Odd balance:  H(0x01 || left || left)
     """
 
-    def __init__(self, chunk_hashes: list[Union[str, bytes]]) -> None:
+    def __init__(self, chunk_hashes: Sequence[Union[str, bytes]]) -> None:
         if not chunk_hashes:
             raise ValueError("Cannot construct Merkle tree with zero chunk hashes")
 
