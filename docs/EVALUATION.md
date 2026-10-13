@@ -147,15 +147,36 @@ These bound what the numbers mean, and they are not minor.
    been run**. Until it has, the goodput figures rest on an unchecked model. The
    waste and corruption-share figures do not: those are byte counts, and they
    hold whatever the timing model gets wrong.
-4. **No comparison against other downloaders.** There are no `aria2c`, `wget` or
-   `axel` numbers. aria2 is the direct competitor for parallel chunked download
-   and its absence is the largest gap in this evaluation. When it is added, state
-   the exact invocation: aria2's `--split` governs how many connections it really
-   opens, and leaving it at the default makes aria2 look far worse than it is.
-5. **Five repetitions is few.** These are descriptive statistics. They report what
+4. **Bandwidth is modelled per connection, not as a shared link.** A mirror
+   profiled at 40 MB/s gives each connection 40 MB/s, so four workers can see
+   roughly 160 MB/s. This is the common case for real origins -- CDNs and object
+   stores throttle per connection, which is why parallel downloaders exist -- but
+   it is also the condition most favourable to parallelism. On a path limited by
+   a shared bottleneck, extra connections divide one capacity and buy only
+   latency hiding. Every speedup here is a speedup against a per-connection
+   limit and must be reported as such.
+5. **Baselines are only partly run.** `benchmarks/run_baselines.py` compares
+   ReliaDL against aria2c, axel, curl and wget on identical conditions, and
+   reports missing tools as missing rather than omitting them. On the development
+   machine only `curl` is installed:
+
+   | Tool | Median | Goodput | |
+   | :--- | ---: | ---: | :--- |
+   | ReliaDL | 1.39 s | 46.0 MB/s | 4 workers |
+   | curl | 3.02 s | 21.2 MB/s | single stream |
+   | aria2c, axel, wget | — | — | not installed |
+
+   That is a 2.2x speedup over a single stream, which is the expected shape and
+   not a competitive claim. **aria2c is the direct competitor and its absence is
+   the largest gap in this evaluation.** When it is added, record the exact
+   invocation: aria2's `--split` governs how many connections it really opens and
+   `--min-split-size` (20 MB by default) silently caps the split on smaller
+   files, so the defaults make aria2 look far worse than it is. Both are set
+   explicitly in `benchmarks/baselines.py`.
+6. **Five repetitions is few.** These are descriptive statistics. They report what
    was observed and how much it varied. They do not establish that one policy
    beats another, and must not be written up as though they do.
-6. **One file size, one worker count.** Everything here is 64 MB with 4 workers.
+7. **One file size, one worker count.** Everything here is 64 MB with 4 workers.
    Chunk sizing in particular is sensitive to both, and neither has been swept.
 
 ## What would make this publishable
@@ -163,7 +184,8 @@ These bound what the numbers mean, and they are not minor.
 In rough order of how much each would add:
 
 1. Run the netem validation, and report the gap honestly whatever it is.
-2. Add aria2c, curl and wget baselines.
+2. Install aria2c and run `benchmarks/run_baselines.py`; curl alone is not a
+   competitive comparison.
 3. Sweep file size and worker count; the chunk-sizing result is a claim about a
    tradeoff and a tradeoff needs a curve, not a point.
 4. Raise repetitions to 20+ and report confidence intervals.

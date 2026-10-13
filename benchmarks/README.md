@@ -97,14 +97,43 @@ it, so it measured routing plus localization while claiming all three.
 
 ## Baselines against other tools
 
-**Not yet implemented, and the results are incomplete without it.** A paper
-claiming a better parallel downloader needs `aria2c -x N -s N` numbers; `curl`
-and `wget` single-stream are useful references. `aria2c` is not installed on the
-development machine, which is why this is outstanding rather than done.
+```bash
+python -m benchmarks.run_baselines --scenario clean --repetitions 3
+```
 
-Note when adding it: aria2's `--split` governs how many connections it actually
-opens, and leaving it at the default makes aria2 look far worse than it is. State
-the exact invocation alongside any number.
+Runs ReliaDL and every installed tool against the same mirror, same payload, same
+seed. Tools that are not installed are **reported as missing**, never omitted:
+"aria2c was not available" and "aria2c was not faster" are different statements
+and the table must not blur them. The command exits non-zero while any tool is
+missing, so an incomplete comparison cannot be mistaken for a complete one.
+
+Fairness details that the defaults get wrong, and which `baselines.py` sets
+explicitly:
+
+- `aria2c -x N` alone does **not** open N connections to one origin; `--split`
+  governs that, and omitting it makes aria2 look far worse than it is.
+- `aria2c --min-split-size` defaults to 20 MB, silently capping the real split
+  count on smaller files.
+- `curl` and `wget` are single-stream *references*, not competitors. They
+  establish what one connection achieves, which is what makes a parallel speedup
+  meaningful.
+- Every tool's output is hashed afterwards, so one that truncates silently is
+  caught rather than credited with a fast run.
+
+**aria2c is not installed on the development machine, so the comparison is
+incomplete.** With curl alone: ReliaDL 46.0 MB/s with 4 workers against curl's
+21.2 MB/s single stream, a 2.2x speedup -- the expected shape, not a competitive
+result.
+
+## Bandwidth is modelled per connection
+
+A mirror profiled at 40 MB/s gives *each connection* 40 MB/s, so four workers can
+see roughly 160 MB/s in aggregate. This is the common case for real origins --
+CDNs and object stores throttle per connection, which is the reason parallel
+downloaders help -- but it is also the condition most favourable to parallelism.
+Behind a shared bottleneck link, extra connections divide one capacity and buy
+only latency hiding. Every speedup measured here is a speedup against a
+per-connection limit and should be reported that way.
 
 ## Statistics
 

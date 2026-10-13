@@ -55,7 +55,21 @@ class MirrorProfile:
 
     # Steady-state behaviour
     bandwidth_bps: Optional[float] = None
-    """Write pacing in bytes/sec. None means as fast as the loopback allows."""
+    """
+    Write pacing in bytes/sec, applied **per connection**, not as a shared cap.
+
+    This is a modelling decision and it matters, because it is the condition
+    under which parallel download helps at all. N connections to a mirror
+    profiled at B bytes/sec therefore see up to N*B in aggregate.
+
+    Per-connection throttling is the common case in practice -- CDNs, object
+    stores and most origins limit each connection rather than each client -- and
+    it is why parallel downloaders exist. But a path limited by a shared
+    bottleneck link behaves differently: there, extra connections divide the same
+    capacity and parallelism buys nothing beyond hiding per-request latency. Any
+    speedup measured here is a speedup against a per-connection limit, and should
+    be reported as such rather than as a general result.
+    """
 
     latency_seconds: float = 0.0
     """Delay before the first byte of a response, standing in for RTT."""
@@ -246,9 +260,24 @@ class _FaultyHandler(BaseHTTPRequestHandler):
         if_range = self.headers.get("If-Range")
 
         if not range_header or (if_range and if_range != srv.etag):
-            # _respond sets Content-Length itself; a HEAD still has to advertise
-            # the full size, so the body is passed and suppressed by `head`.
-            self._respond(200, srv.payload, head, {})
+            # A whole-file GET is shaped exactly like a ranged one. It previously
+            # bypassed pacing and latency entirely, which made any single-stream
+            # tool appear roughly ten times faster than the link allowed and
+            # rendered every baseline comparison meaningless.
+            if profile.latency_seconds > 0:
+                time.sleep(profile.latency_seconds)
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(srv.payload)))
+            for key, value in self._headers().items():
+                self.send_header(key, value)
+            self.end_headers()
+            if not head:
+                try:
+                    written = self._paced_write(srv.payload, profile.bandwidth_bps)
+                except (BrokenPipeError, ConnectionResetError, OSError):
+                    written = len(srv.payload)
+                with srv.lock:
+                    srv.stats.bytes_written += written
             return
 
         start_s, _, end_s = range_header.split("=", 1)[1].partition("-")
