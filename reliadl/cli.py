@@ -347,11 +347,11 @@ def run_doctor(args: argparse.Namespace) -> int:
 
     if platform.system() != "Windows":
         try:
-            # Unix-only module; the branch above already excludes Windows, but
-            # mypy analyses both branches on every platform.
+            # Unix-only module; the branch above excludes Windows at runtime, and
+            # mypy is pinned to platform = "linux" so it resolves here too.
             import resource
 
-            soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)  # type: ignore[attr-defined]
+            soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
             if soft >= 1024:
                 print(f"[PASS] File Descriptor Limit Adequate (soft={soft}, hard={hard})")
             else:

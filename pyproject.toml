@@ -89,6 +89,12 @@ ignore = [
 python_version = "3.10"
 ignore_missing_imports = true
 files = ["reliadl"]
+# Analyse as Linux everywhere. mypy resolves platform-specific modules (resource,
+# fcntl) against the host OS by default, so the same source needs a `type: ignore`
+# on Windows and reports it as unused on Linux -- the check could not pass in both
+# places. CI runs Linux, so that is the answer to standardise on; runtime guards
+# such as `if platform.system() != "Windows"` still apply at runtime regardless.
+platform = "linux"
 # Not strict yet. The baseline is "no errors", enforced in CI, so new code cannot
 # add any; tightening further is a separate piece of work.
 warn_unused_ignores = true
