@@ -84,18 +84,19 @@ the parallelism lost costs far more than the per-request overhead saved. The
 unconstrained controller walks straight into this: on a clean path it sees no
 loss, grows the chunk towards its 64 MB ceiling, and starves the pool.
 
-Measured, 64 MB file, 4 workers, bandwidth-capped origin:
+Measured, 64 MB file, 4 workers, median of 5 seeds. The two arms were interleaved
+within one process so that drift in machine load fell on both equally:
 
-| Scenario | Fixed 4 MB chunks | BL-DCS, unconstrained | BL-DCS + concurrency floor |
-| :--- | ---: | ---: | ---: |
-| clean | 50.6 MB/s | 29.9 MB/s | **53.5 MB/s** |
-| heterogeneous | 50.4 MB/s | 29.0 MB/s | **52.4 MB/s** |
-| failover | 8.6 MB/s | 3.6 MB/s | **9.0 MB/s** |
-| lossy | 51.0 MB/s | 47.1 MB/s | 46.1 MB/s |
+| Scenario | Floor off | Floor on | |
+| :--- | ---: | ---: | :--- |
+| clean | 28.8 MB/s | 52.1 MB/s | +81% |
+| heterogeneous | 28.7 MB/s | 53.9 MB/s | +88% |
+| failover | 3.6 MB/s | 8.9 MB/s | +146% |
+| lossy | 43.9 MB/s | 46.1 MB/s | +5% |
 
-Unconstrained, the controller was 41% *slower* than a fixed chunk size on a clean
-path, and 58% slower when a mirror degraded mid-transfer (one 32 MB chunk landing
-on the slow side stalls everything behind it).
+Unconstrained, the controller was around 45% *slower* than a fixed 4 MB chunk
+size, and on `failover` a single 32 MB chunk landing on the degraded mirror stalls
+everything queued behind it.
 
 The fix caps the issued chunk at `remaining_bytes / workers`, so at least `W`
 chunks always remain:
@@ -114,6 +115,14 @@ partition stays contiguous.
 square-root tradeoff is textbook; stating that it is wrong for a parallel
 downloader unless constrained by the worker count, and showing the size of the
 error, is not something the chunk-sizing literature appears to cover.
+
+It should be read for exactly what it is, though. The floor repairs a large
+regression; it does not make adaptive sizing a win. Against a fixed 4 MB chunk the
+constrained controller reaches parity on a clean path, is better on `failover`,
+and is modestly worse on `lossy` and `heterogeneous` -- 4 MB simply happens to
+suit this workload. The controller would have to earn its place on paths where a
+good fixed size is not known ahead of time, and a single file size with a single
+worker count cannot demonstrate that. See [EVALUATION.md](EVALUATION.md).
 
 ### Open issues — do not cite this controller until these are resolved
 

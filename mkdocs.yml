@@ -109,6 +109,7 @@ nav:
     - Data Flow: DATA_FLOW.md
     - Technical Specification: TECHNICAL_SPECIFICATION.md
     - Algorithms: ALGORITHMS.md
+    - Evaluation: EVALUATION.md
     - Performance: PERFORMANCE.md
   - API Reference:
     - API Reference: API_REFERENCE.md
