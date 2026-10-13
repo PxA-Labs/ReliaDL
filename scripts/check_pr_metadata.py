@@ -37,15 +37,27 @@ def check_pr_description(body):
             
     return True, "PR Description is valid."
 
+# Only our own code is scanned. rglob over the repository root also walks any
+# virtualenv a developer has created in it, and third-party packages are full of
+# TODO comments -- so the check used to fail for anyone with a local .venv while
+# passing in CI, where no virtualenv exists.
+SOURCE_DIRS = ("reliadl", "benchmarks", "scripts")
+
+
 def check_placeholders(repo_root):
     """
-    Scans files for debug placeholders or boilerplate indicators.
+    Scans our own source for debug placeholders or boilerplate indicators.
     """
-    md_files = list(Path(repo_root).rglob("*.py"))
+    root = Path(repo_root)
+    py_files = [
+        path
+        for directory in SOURCE_DIRS
+        for path in (root / directory).rglob("*.py")
+    ]
     placeholders = ["# TODO", "# FIXME", "placeholder_value_here", "dummy_value"]
-    
+
     found_placeholders = []
-    for file_path in md_files:
+    for file_path in py_files:
         # Skip checking the verification script itself and tests
         if "check_pr_metadata.py" in str(file_path) or "test_" in str(file_path):
             continue
@@ -54,7 +66,7 @@ def check_placeholders(repo_root):
             for idx, line in enumerate(f, 1):
                 for p in placeholders:
                     if p in line:
-                        found_placeholders.append(f"{file_path.name}:{idx} - Found placeholder '{p}'")
+                        found_placeholders.append(f"{file_path.relative_to(root)}:{idx} - Found placeholder '{p}'")
                         
     if found_placeholders:
         return False, "Code contains temporary debug placeholders:\n" + "\n".join(found_placeholders)
