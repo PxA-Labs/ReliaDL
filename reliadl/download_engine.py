@@ -271,6 +271,10 @@ class DownloadEngine:
                 # A manifest fixes the partition and supplies the digests, so it
                 # overrides both the fixed size and the adaptive planner: the
                 # boundaries must match the ones the hashes were computed over.
+                # The planner must also be switched off, or it would keep issuing
+                # further chunks on top of the manifest's partition as the queue
+                # drained and the file would be fetched twice over.
+                self._scheduler.disable_planning()
                 state.chunks = manifest_chunks
                 state.chunk_size = manifest_chunks[0].size if manifest_chunks else state.chunk_size
             else:
@@ -657,10 +661,24 @@ class DownloadEngine:
         scheduler = self._scheduler
         if scheduler is None:
             return None
+        deadline = time.monotonic() + self._config.mirror_wait_timeout_seconds
         while not self._shutdown.is_set():
             selection = scheduler.select_mirror(exclude=exclude)
             if selection is not None:
                 return selection
+            if time.monotonic() >= deadline:
+                # Every mirror is in cooldown and has stayed there. Waiting
+                # further would hang the transfer indefinitely rather than fail
+                # it, which is worse than failing: the caller gets no error, no
+                # progress and no way to tell the two apart. Raising a retryable
+                # error hands the chunk back to the normal retry and abandon
+                # path, so the download ends with a diagnosable failure.
+                raise NetworkError(
+                    "No mirror became available within "
+                    f"{self._config.mirror_wait_timeout_seconds:.0f}s; all are in "
+                    "circuit-breaker cooldown",
+                    url=scheduler._origin_url,
+                )
             wait = max(0.05, min(scheduler.seconds_until_retry, 5.0))
             logger.debug("mirror.cooldown", seconds=round(wait, 2))
             await asyncio.sleep(wait)

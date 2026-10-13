@@ -126,16 +126,21 @@ class TransferScheduler:
             )
 
         self._dispatcher: Optional[MirrorDispatcher] = None
-        if adaptive_mirror_routing:
-            urls = [origin_url, *[m for m in mirrors if m and m != origin_url]]
+        urls = [origin_url, *[m for m in mirrors if m and m != origin_url]]
+        # Routing needs somewhere to route to. With a single endpoint the bandit
+        # would degenerate harmlessly, but the circuit breaker would not: it
+        # exists to divert traffic away from an unhealthy mirror, and with no
+        # alternative it diverts the transfer into a stall instead. A pool of one
+        # is therefore served directly, which still records every metric because
+        # those come from the collector rather than the dispatcher.
+        if adaptive_mirror_routing and len(urls) > 1:
             endpoints = [
                 MirrorEndpoint(mirror_id=derive_mirror_id(url, i), url=url)
                 for i, url in enumerate(urls)
             ]
-            # A single endpoint is still routed, so the metrics and the breaker
-            # behave identically whether or not mirrors were configured. The
-            # bandit degenerates to always choosing the one arm.
             self._dispatcher = MirrorDispatcher(endpoints=endpoints, seed=seed)
+        self._routing_requested = bool(adaptive_mirror_routing)
+        self._single_mirror = len(urls) <= 1
 
     # ---------------------------------------------------------------- state
 
@@ -199,6 +204,17 @@ class TransferScheduler:
                     )
                 )
         return planned
+
+    def disable_planning(self) -> None:
+        """
+        Stop issuing chunks, because something else owns the partition.
+
+        A manifest's hashes are computed over its own chunk boundaries, so when
+        one is supplied it defines the partition and the planner must not add to
+        it. Mirror routing and metrics collection are unaffected.
+        """
+        self._adaptive_chunks = False
+        self._planner = None
 
     def advance_to(self, offset: int) -> None:
         """
@@ -294,6 +310,8 @@ class TransferScheduler:
         out: dict = {
             "adaptive_chunks": self._adaptive_chunks,
             "adaptive_mirrors": self._dispatcher is not None,
+            "routing_requested": self._routing_requested,
+            "single_mirror_pool": self._single_mirror,
             "rtt_seconds": state.rtt_seconds,
             "throughput_bps": state.throughput_bps,
             "drop_probability": state.drop_probability,

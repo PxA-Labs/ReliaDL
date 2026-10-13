@@ -551,6 +551,16 @@ if _HAS_PYDANTIC:
                 "to the pool while keeping per-worker memory bounded."
             ),
         )
+        mirror_wait_timeout_seconds: float = Field(
+            default=60.0,
+            gt=0.0,
+            le=3600.0,
+            description=(
+                "How long a chunk may wait for any mirror to leave circuit-breaker "
+                "cooldown before the attempt fails. Bounds the case where every "
+                "mirror is unhealthy, which would otherwise hang indefinitely."
+            ),
+        )
         adaptive_chunk_sizing: bool = Field(
             default=False,
             description="Size chunks with the BL-DCS controller instead of a fixed size",
@@ -686,6 +696,7 @@ else:
         checkpoint_interval_chunks: int = 16
         checkpoint_interval_seconds: float = 5.0
         write_buffer_bytes: int = 1_048_576
+        mirror_wait_timeout_seconds: float = 60.0
         adaptive_chunk_sizing: bool = False
         adaptive_mirror_routing: bool = False
         mirrors: List[str] = field(default_factory=list)

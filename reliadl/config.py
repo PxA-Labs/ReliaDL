@@ -420,6 +420,7 @@ def get_download_config(
         "checkpoint_interval_chunks": download_sec.get("checkpoint_interval_chunks", 16),
         "checkpoint_interval_seconds": download_sec.get("checkpoint_interval_seconds", 5.0),
         "write_buffer_bytes": parse_size(download_sec.get("write_buffer", "1MB")),
+        "mirror_wait_timeout_seconds": download_sec.get("mirror_wait_timeout_seconds", 60.0),
         "adaptive_chunk_sizing": download_sec.get("adaptive_chunk_sizing", False),
         "adaptive_mirror_routing": download_sec.get("adaptive_mirror_routing", False),
         "mirrors": list(download_sec.get("mirrors", []) or []),
