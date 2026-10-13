@@ -69,13 +69,20 @@ docker run --rm \
 ### 2.4 Dependencies
 
 ```
-httpx[http2]>=0.27.0     # HTTP client with HTTP/2 support
-aiofiles>=24.1.0          # Async file I/O
-click>=8.1.0              # CLI framework
-pydantic>=2.5.0           # Configuration validation
-structlog>=24.1.0         # Structured logging
-pyyaml>=6.0.0             # YAML config parser
-rich>=13.7.0              # Terminal progress bars & formatting
+pydantic>=2.13.5          # Configuration validation
+PyYAML>=6.0.3             # YAML config parser
+structlog>=26.1.0         # Structured logging
+jsonschema>=4.26.0        # Manifest schema validation
+cryptography>=50.0.1      # Ed25519 manifest signatures
+httpx>=0.28.1             # HTTP client
+
+# Optional extras
+httpx[http2]              # `pip install reliadl[http2]`, for HTTP/2
+httpx[socks]              # `pip install reliadl[socks]`, for SOCKS5 proxies
+
+# The CLI uses stdlib argparse, disk I/O is offloaded with asyncio.to_thread,
+# and progress is printed directly; click, aiofiles and rich are not used.
+# This list mirrors requirements.txt -- change both together.
 ```
 
 ---

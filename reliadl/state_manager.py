@@ -19,11 +19,14 @@ from reliadl.exceptions import (
     StateNotFoundError,
     StorageError,
 )
+from reliadl.logger import get_logger
 from reliadl.models import (
     ChunkState,
     ChunkStatus,
     DownloadState,
 )
+
+logger = get_logger(__name__)
 
 # Owner read/write only (POSIX 0600)
 STATE_FILE_PERMISSIONS = 0o600
@@ -121,8 +124,11 @@ class StateManager:
             # 2. Enforce mode 0600
             try:
                 os.chmod(tmp_path, STATE_FILE_PERMISSIONS)
-            except OSError:
-                pass
+            except OSError as exc:
+                # Not fatal -- Windows and some filesystems do not honour POSIX
+                # modes -- but the 0600 guarantee documented in SECURITY.md does
+                # not hold when this fails, so it must not vanish silently.
+                logger.debug("state.chmod_failed", path=str(tmp_path), error=str(exc))
 
             # 3. Create backup if primary state currently exists
             if self.backup_enabled and path.is_file():
@@ -158,8 +164,11 @@ class StateManager:
                     os.fsync(dir_fd)
                 finally:
                     os.close(dir_fd)
-            except OSError:
-                pass
+            except OSError as exc:
+                # Directory fsync is unsupported on Windows, so this is expected
+                # there. Where it is supported and still fails, the rename may not
+                # survive a crash, which is worth a line in the log.
+                logger.debug("state.dir_fsync_failed", path=str(path.parent), error=str(exc))
 
             return path
 
@@ -212,9 +221,26 @@ class StateManager:
                     state = self._load_file(bak_path)
                     # Restore primary from backup
                     self.save(state, state_path=path)
+                    logger.warning(
+                        "state.recovered_from_backup",
+                        state_file=str(path),
+                        backup_file=str(bak_path),
+                        primary_error=str(primary_err),
+                    )
                     return state
-                except Exception:
-                    pass
+                except Exception as backup_err:
+                    # Previously `pass`, which discarded the only evidence that a
+                    # recovery was attempted. The primary error is still what the
+                    # caller gets -- it is the more useful one -- but a corrupt
+                    # backup is itself worth knowing about, because it means the
+                    # safety net is gone too.
+                    logger.error(
+                        "state.backup_recovery_failed",
+                        state_file=str(path),
+                        backup_file=str(bak_path),
+                        backup_error=str(backup_err),
+                        primary_error=str(primary_err),
+                    )
             raise primary_err
 
     def _load_file(self, file_path: Path) -> DownloadState:

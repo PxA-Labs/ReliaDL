@@ -25,7 +25,7 @@ ReliaDL follows these design principles:
 ```mermaid
 graph TB
     subgraph PresentationLayer["Presentation Layer"]
-        CLI["CLI Interface<br/>(main.py / click)"]
+        CLI["CLI Interface<br/>(cli.py / argparse)"]
     end
 
     subgraph OrchestrationLayer["Orchestration & Control"]
@@ -89,7 +89,7 @@ graph TB
 | `status` | Show download progress | State file path |
 
 **Design Decisions**:
-- Uses `click` for declarative CLI definition with auto-generated `--help`
+- Uses stdlib `argparse`; subcommands are registered in `build_parser()`
 - All commands are idempotent — running `download` on an existing state file resumes instead of restarting
 - Exit codes follow Unix conventions (0 = success, 1 = error, 2 = usage error)
 
@@ -517,8 +517,8 @@ Structured JSON logging via `structlog`:
 │  └──────────────────────────────────┘   │
 │                                         │
 │  ┌──────────────────────────────────┐   │
-│  │     aiofiles                     │   │
-│  │     (async disk I/O)             │   │
+│  │     asyncio.to_thread            │   │
+│  │     (offloads blocking pwrite)   │   │
 │  └──────────────────────────────────┘   │
 │                                         │
 │  ┌──────────────────────────────────┐   │

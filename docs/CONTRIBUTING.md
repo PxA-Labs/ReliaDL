@@ -36,9 +36,10 @@ pre-commit>=3.5.0    # Git hooks
 
 [test extras]
 pytest>=8.0.0
-pytest-asyncio>=0.23.0
 pytest-cov>=4.1.0
-coverage>=7.4.0
+
+Tests are written with stdlib unittest and run under pytest; async cases use
+unittest.IsolatedAsyncioTestCase, so pytest-asyncio is not needed.
 
 [docs extras]
 mkdocs>=1.5.0
