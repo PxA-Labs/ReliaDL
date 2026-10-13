@@ -462,6 +462,33 @@ class DynamicChunkPlanner:
                 return specs
             specs.append(spec)
 
+    def rewind_to(self, offset: int, index: int) -> None:
+        """
+        Move the cursor back so bytes given up by a caller are planned again.
+
+        A caller that shrinks an issued chunk -- to keep enough chunks in flight
+        to occupy a worker pool, for instance -- must return the bytes it did not
+        use, or they would fall out of the partition entirely and the file would
+        be left with a hole. Only backwards moves are accepted, since moving the
+        cursor forward would skip bytes rather than re-plan them.
+        """
+        with self._lock:
+            if not 0 <= offset <= self._file_size:
+                raise ConfigurationError(
+                    f"rewind offset ({offset}) must lie within [0, {self._file_size}]",
+                    parameter="offset",
+                    value=offset,
+                )
+            if offset > self._offset:
+                raise ConfigurationError(
+                    f"rewind offset ({offset}) is ahead of the cursor "
+                    f"({self._offset}); that would skip bytes rather than re-plan them",
+                    parameter="offset",
+                    value=offset,
+                )
+            self._offset = offset
+            self._index = index
+
     def reset(self) -> None:
         """Return the planner to the start of the artifact."""
         with self._lock:

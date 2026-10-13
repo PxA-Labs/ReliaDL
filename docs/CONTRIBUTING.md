@@ -36,9 +36,10 @@ pre-commit>=3.5.0    # Git hooks
 
 [test extras]
 pytest>=8.0.0
-pytest-asyncio>=0.23.0
 pytest-cov>=4.1.0
-coverage>=7.4.0
+
+Tests are written with stdlib unittest and run under pytest; async cases use
+unittest.IsolatedAsyncioTestCase, so pytest-asyncio is not needed.
 
 [docs extras]
 mkdocs>=1.5.0
@@ -94,7 +95,7 @@ perf(hash): use streaming hash to reduce peak memory usage
  3. Ensure your PR Title and Description satisfy CI validation:
     - **PR Title**: Must use conventional commit syntax (e.g., `feat(core): add proxy support`) and be at least 10 characters.
     - **PR Description**: Must be at least 30 characters and describe the changes without empty placeholders.
- 4. Ensure Novelty Verification passes: No debug placeholders (`# TODO`, `# FIXME`, `placeholder_value_here`, `dummy_value`) in production code.
+ 4. Ensure PR metadata validation passes: No debug placeholders (`# TODO`, `# FIXME`, `placeholder_value_here`, `dummy_value`) in production code.
  5. Ensure all unit and integration tests pass: `python -m unittest discover -s tests` or `pytest -v`
  6. Ensure code quality: `ruff check .` and `mypy src/`
  7. Update documentation in `docs/` and changelog if public APIs or behaviors change.

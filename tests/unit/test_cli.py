@@ -61,6 +61,79 @@ class TestCLISubcommands(unittest.TestCase):
             ret = run_probe(args)
             self.assertEqual(ret, 0)
 
+    def test_inspect_state_reads_a_download_state_file(self) -> None:
+        """
+        The state-file branch of inspect-state, which was entirely broken.
+
+        It called StateManager.snapshot(), which does not exist, so the command
+        failed every time it was pointed at an actual .state file. Only the
+        manifest branch was covered, and a broad `except Exception` reported the
+        AttributeError as a parse failure, so nothing looked wrong. This asserts
+        on the reported contents, not merely on the exit code, because the old
+        code "succeeded" at printing an error.
+        """
+        import json
+        from io import StringIO
+        from contextlib import redirect_stdout
+
+        from reliadl.models import ChunkState, DownloadState, DownloadStatus
+        from reliadl.state_manager import StateManager
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "payload.bin"
+            chunks = [
+                ChunkState(index=0, start_byte=0, end_byte=511),
+                ChunkState(index=1, start_byte=512, end_byte=1023),
+            ]
+            chunks[0].mark_complete("c" * 64)
+            state = DownloadState(
+                download_id="d" * 8,
+                url="http://example.com/payload.bin",
+                target_path=str(target),
+                file_size=1024,
+                chunk_size=512,
+                hash_algorithm="sha256",
+                status=DownloadStatus.DOWNLOADING,
+                chunks=chunks,
+            )
+            state_path = Path(tmpdir) / "payload.bin.state"
+            StateManager().save(state, state_path)
+
+            parser = build_parser()
+            args = parser.parse_args(
+                ["inspect-state", "--state-file", str(state_path), "--json"]
+            )
+            buffer = StringIO()
+            with redirect_stdout(buffer):
+                self.assertEqual(run_inspect_state(args), 0)
+
+            report = json.loads(buffer.getvalue())
+            self.assertEqual(report["file_size"], 1024)
+            self.assertEqual(report["total_chunks"], 2)
+            self.assertEqual(report["completed_chunks"], 1)
+            self.assertEqual(report["pending_chunks"], 1)
+            self.assertEqual(report["bytes_downloaded"], 512)
+            self.assertEqual(report["url"], "http://example.com/payload.bin")
+            self.assertEqual(report["status"], "DOWNLOADING")
+
+            text_args = parser.parse_args(
+                ["inspect-state", "--state-file", str(state_path)]
+            )
+            text_buffer = StringIO()
+            with redirect_stdout(text_buffer):
+                self.assertEqual(run_inspect_state(text_args), 0)
+            printed = text_buffer.getvalue()
+            self.assertIn("Completed Chunks : 1 / 2", printed)
+            self.assertNotIn("[ERROR]", printed)
+
+    def test_inspect_state_reports_a_missing_file_as_failure(self) -> None:
+        """A path that is neither a manifest nor a state file must exit non-zero."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            missing = Path(tmpdir) / "absent.state"
+            parser = build_parser()
+            args = parser.parse_args(["inspect-state", "--state-file", str(missing)])
+            self.assertEqual(run_inspect_state(args), 1)
+
     def test_inspect_state_manifest(self) -> None:
         """Test run_inspect_state on ChunkGuard manifest."""
         manifest = ChunkManifest(

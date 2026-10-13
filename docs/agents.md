@@ -43,7 +43,7 @@ To connect to the Mem0 Platform, you need a Mem0 API key.
 Store your API key in your environment variables:
 
 ```bash
-export MEM0_API_KEY="m0-kfy7muuvGNkeU0BFkVV2fYu6fv65UxA34nJvZ4TC"
+export MEM0_API_KEY="<YOUR_MEM0_API_KEY>"
 ```
 
 If you are using LLMs or embedders through other providers (e.g. OpenAI), also set their respective keys:
@@ -68,7 +68,7 @@ from mem0 import MemoryClient
 client = MemoryClient()
 
 # Alternative: Pass the API key explicitly
-# client = MemoryClient(api_key="m0-kfy7muuvGNkeU0BFkVV2fYu6fv65UxA34nJvZ4TC")
+# client = MemoryClient(api_key="<YOUR_MEM0_API_KEY>")
 
 # Define user context
 USER_ID = "developer_alpha"

@@ -11,8 +11,8 @@ permissions:
   pull-requests: read
 
 jobs:
-  validate-metadata-and-novelty:
-    name: Validate Title, Description, and Novelty
+  validate-pr-metadata:
+    name: Validate PR Title, Description, and Placeholders
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -23,9 +23,9 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Run Metadata & Novelty Validation Script
+      - name: Run PR Metadata Validation Script
         run: |
-          python scripts/verify_novelty.py
+          python scripts/check_pr_metadata.py
 
   run-tests:
     name: Verify Test Cases

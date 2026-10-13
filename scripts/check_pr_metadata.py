@@ -37,29 +37,41 @@ def check_pr_description(body):
             
     return True, "PR Description is valid."
 
-def check_novelty(repo_root):
+# Only our own code is scanned. rglob over the repository root also walks any
+# virtualenv a developer has created in it, and third-party packages are full of
+# TODO comments -- so the check used to fail for anyone with a local .venv while
+# passing in CI, where no virtualenv exists.
+SOURCE_DIRS = ("reliadl", "benchmarks", "scripts")
+
+
+def check_placeholders(repo_root):
     """
-    Scans files for debug placeholders or boilerplate indicators.
+    Scans our own source for debug placeholders or boilerplate indicators.
     """
-    md_files = list(Path(repo_root).rglob("*.py"))
+    root = Path(repo_root)
+    py_files = [
+        path
+        for directory in SOURCE_DIRS
+        for path in (root / directory).rglob("*.py")
+    ]
     placeholders = ["# TODO", "# FIXME", "placeholder_value_here", "dummy_value"]
-    
+
     found_placeholders = []
-    for file_path in md_files:
+    for file_path in py_files:
         # Skip checking the verification script itself and tests
-        if "verify_novelty.py" in str(file_path) or "test_" in str(file_path):
+        if "check_pr_metadata.py" in str(file_path) or "test_" in str(file_path):
             continue
             
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             for idx, line in enumerate(f, 1):
                 for p in placeholders:
                     if p in line:
-                        found_placeholders.append(f"{file_path.name}:{idx} - Found placeholder '{p}'")
+                        found_placeholders.append(f"{file_path.relative_to(root)}:{idx} - Found placeholder '{p}'")
                         
     if found_placeholders:
         return False, "Code contains temporary debug placeholders:\n" + "\n".join(found_placeholders)
         
-    return True, "Code satisfies novelty verification guidelines."
+    return True, "No debug placeholders found in production code."
 
 def main():
     event_path = os.environ.get("GITHUB_EVENT_PATH")
@@ -87,22 +99,22 @@ def main():
 
     # 1. Check PR Title
     title_ok, title_msg = check_pr_title(title)
-    print(f"-> Title Check: {'✅' if title_ok else '❌'} {title_msg}")
+    print(f"-> Title Check: {'PASS' if title_ok else 'FAIL'} {title_msg}")
     
     # 2. Check PR Description
     desc_ok, desc_msg = check_pr_description(body)
-    print(f"-> Description Check: {'✅' if desc_ok else '❌'} {desc_msg}")
+    print(f"-> Description Check: {'PASS' if desc_ok else 'FAIL'} {desc_msg}")
     
-    # 3. Check Novelty in code
-    novel_ok, novel_msg = check_novelty(repo_root)
-    print(f"-> Novelty Check: {'✅' if novel_ok else '❌'} {novel_msg}")
+    # 3. Check for debug placeholders
+    placeholders_ok, placeholders_msg = check_placeholders(repo_root)
+    print(f"-> Placeholder Check: {'PASS' if placeholders_ok else 'FAIL'} {placeholders_msg}")
 
     # Aggregating results
-    if not (title_ok and desc_ok and novel_ok):
-        print("\n❌ PR Checks Failed! Please fix the errors listed above before merging.")
+    if not (title_ok and desc_ok and placeholders_ok):
+        print("\n[FAIL] PR Checks Failed! Please fix the errors listed above before merging.")
         sys.exit(1)
         
-    print("\n✅ All PR standard checks (Title, Description, and Novelty) passed successfully!")
+    print("\n[PASS] All PR metadata checks (Title, Description, Placeholders) passed.")
     sys.exit(0)
 
 if __name__ == "__main__":

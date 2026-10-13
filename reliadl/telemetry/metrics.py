@@ -501,7 +501,10 @@ class Histogram(Metric):
         samples: List[Sample] = []
         for key in keys:
             cumulative = self.bucket_counts(**dict(key))
-            for bound, total in zip(self.bounds, cumulative):
+            # bucket_counts returns one entry per bound *plus* the +Inf bucket,
+            # which is emitted separately below. The shorter sequence is meant to
+            # govern here, so strict=False is deliberate rather than an oversight.
+            for bound, total in zip(self.bounds, cumulative, strict=False):
                 samples.append(
                     Sample(
                         f"{self.name}_bucket",
@@ -808,7 +811,7 @@ class MetricsServer:
     @property
     def port(self) -> int:
         """Port actually bound, which differs from the request when 0 was given."""
-        return cast(int, self._server.server_address[1])
+        return self._server.server_address[1]
 
     @property
     def host(self) -> str:

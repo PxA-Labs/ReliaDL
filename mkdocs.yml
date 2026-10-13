@@ -108,7 +108,8 @@ nav:
     - System Architecture: ARCHITECTURE.md
     - Data Flow: DATA_FLOW.md
     - Technical Specification: TECHNICAL_SPECIFICATION.md
-    - Novel Algorithms: NOVEL_ALGORITHMS.md
+    - Algorithms: ALGORITHMS.md
+    - Evaluation: EVALUATION.md
     - Performance: PERFORMANCE.md
   - API Reference:
     - API Reference: API_REFERENCE.md

@@ -13,7 +13,7 @@ import hashlib
 import hmac
 import json
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Optional, Sequence, Union
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
@@ -846,7 +846,27 @@ def hash_parent(left: bytes, right: bytes) -> bytes:
     return hashlib.sha256(b"\x01" + left + right).digest()
 
 
-def compute_merkle_root(chunk_hashes: list[Union[str, bytes]]) -> str:
+def hash_root(tree_root: bytes, leaf_count: int) -> bytes:
+    """
+    Bind the leaf count into the Merkle root (0x02 domain prefix).
+
+    Without this the tree is second-preimage weak in the CVE-2012-2459 shape.
+    Because an odd node is paired with itself, a chunk list whose tail is
+    duplicated produces the *same* internal nodes, and therefore the same root,
+    as the original list -- two different chunk sequences, one signed root. The
+    manifest signs this root, so that is a live forgery surface rather than a
+    theoretical one.
+
+    Committing to the leaf count closes it: the two lists differ in length, so
+    they differ in the final hash regardless of what the tree below agrees on.
+    This is the same remedy as Certificate Transparency's promotion rule, chosen
+    here because it leaves the existing tree shape, and therefore every existing
+    audit path, untouched.
+    """
+    return hashlib.sha256(b"" + leaf_count.to_bytes(8, "big") + tree_root).digest()
+
+
+def compute_merkle_root(chunk_hashes: Sequence[Union[str, bytes]]) -> str:
     """
     Compute binary Merkle tree root hash from a sequence of chunk hashes.
 
@@ -874,7 +894,7 @@ class BinaryMerkleTree:
     Odd balance:  H(0x01 || left || left)
     """
 
-    def __init__(self, chunk_hashes: list[Union[str, bytes]]) -> None:
+    def __init__(self, chunk_hashes: Sequence[Union[str, bytes]]) -> None:
         if not chunk_hashes:
             raise ValueError("Cannot construct Merkle tree with zero chunk hashes")
 
@@ -892,7 +912,9 @@ class BinaryMerkleTree:
             self._levels.append(next_level)
             current = next_level
 
-        self._root = current[0].hex()
+        # The published root commits to the leaf count; see hash_root.
+        self._tree_root = current[0]
+        self._root = hash_root(current[0], len(self._leaf_nodes)).hex()
 
     @property
     def root(self) -> str:
@@ -940,6 +962,7 @@ class BinaryMerkleTree:
         chunk_hash: Union[str, bytes],
         proof: list[tuple[str, str]],
         expected_root: str,
+        leaf_count: Optional[int] = None,
     ) -> bool:
         """
         Verify a Merkle inclusion proof for a chunk against the declared root hash.
@@ -948,6 +971,11 @@ class BinaryMerkleTree:
             chunk_hash: Target chunk SHA-256 hex or raw digest.
             proof: List of (sibling_hex, 'left'|'right') steps.
             expected_root: Expected Merkle tree root hex string.
+            leaf_count: Number of leaves the root commits to. Required to match a
+                root produced by this implementation, since the root binds the
+                count (see hash_root). When omitted it is inferred from the proof
+                length, which is exact for a power-of-two leaf count and an upper
+                bound otherwise; pass it explicitly when the manifest knows it.
 
         Returns:
             True if audit path matches expected_root, False otherwise.
@@ -961,7 +989,21 @@ class BinaryMerkleTree:
             else:
                 current = hash_parent(current, sib_bytes)
 
-        return hmac.compare_digest(current.hex().lower(), expected_root.strip().lower())
+        target = expected_root.strip().lower()
+        if leaf_count is not None:
+            return hmac.compare_digest(hash_root(current, leaf_count).hex(), target)
+
+        # The proof alone does not reveal the leaf count, only its depth. Every
+        # count consistent with that depth is tried, so a caller that cannot
+        # supply the count still verifies correctly; the candidate set is at most
+        # the width of the bottom level.
+        depth = len(proof)
+        lo = 1 if depth == 0 else (1 << (depth - 1)) + 1
+        hi = 1 << depth
+        for candidate in range(lo, hi + 1):
+            if hmac.compare_digest(hash_root(current, candidate).hex(), target):
+                return True
+        return False
 
     @classmethod
     def from_manifest(cls, manifest: ChunkManifest) -> BinaryMerkleTree:

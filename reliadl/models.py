@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 try:
     from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -524,6 +524,55 @@ if _HAS_PYDANTIC:
             default=True,
             description="Perform whole-file hash verification after assembly",
         )
+        checkpoint_interval_chunks: int = Field(
+            default=16,
+            ge=1,
+            le=100_000,
+            description=(
+                "Checkpoint the resume state after this many completed chunks. "
+                "Checkpointing fsyncs the output and rewrites the state file, so "
+                "doing it per chunk stalls every worker; a crash costs at most this "
+                "many chunks of re-download."
+            ),
+        )
+        checkpoint_interval_seconds: float = Field(
+            default=5.0,
+            gt=0.0,
+            le=3600.0,
+            description="Checkpoint at least this often, regardless of chunk count",
+        )
+        write_buffer_bytes: int = Field(
+            default=1_048_576,
+            ge=4096,
+            le=67_108_864,
+            description=(
+                "Bytes buffered in memory per worker before a positional write is "
+                "offloaded to a thread. Bounds how often the event loop hands work "
+                "to the pool while keeping per-worker memory bounded."
+            ),
+        )
+        mirror_wait_timeout_seconds: float = Field(
+            default=60.0,
+            gt=0.0,
+            le=3600.0,
+            description=(
+                "How long a chunk may wait for any mirror to leave circuit-breaker "
+                "cooldown before the attempt fails. Bounds the case where every "
+                "mirror is unhealthy, which would otherwise hang indefinitely."
+            ),
+        )
+        adaptive_chunk_sizing: bool = Field(
+            default=False,
+            description="Size chunks with the BL-DCS controller instead of a fixed size",
+        )
+        adaptive_mirror_routing: bool = Field(
+            default=False,
+            description="Route range requests across mirrors with the EXP3.S bandit",
+        )
+        mirrors: List[str] = Field(
+            default_factory=list,
+            description="Additional base URLs serving the same payload",
+        )
         cleanup_chunks_on_complete: bool = Field(
             default=True,
             description="Delete chunk files after successful assembly",
@@ -611,8 +660,14 @@ if _HAS_PYDANTIC:
                 )
             return self
 
-        def validate(self) -> None:
-            """Validate configuration values. Raises ValueError on invalid values."""
+        def validate(self) -> None:  # type: ignore[override]
+            """
+            Validate configuration values. Raises ValueError on invalid values.
+
+            Deliberately shadows pydantic's deprecated classmethod of the same
+            name so that both DownloadConfig variants -- this one and the
+            dataclass fallback below -- present one interface to callers.
+            """
             self.model_validate(self.model_dump())
 
         def to_dict(self) -> dict[str, Any]:
@@ -626,7 +681,7 @@ if _HAS_PYDANTIC:
 
 else:
     @dataclass
-    class DownloadConfig:
+    class DownloadConfig:  # type: ignore[no-redef]
         """
         Configuration dataclass providing typing and boundary validation.
         Fallback implementation for environments where pydantic is not installed.
@@ -644,6 +699,13 @@ else:
         hash_algorithm: str = "sha256"
         state_directory: str = ".ReliaDL"
         verify_on_complete: bool = True
+        checkpoint_interval_chunks: int = 16
+        checkpoint_interval_seconds: float = 5.0
+        write_buffer_bytes: int = 1_048_576
+        mirror_wait_timeout_seconds: float = 60.0
+        adaptive_chunk_sizing: bool = False
+        adaptive_mirror_routing: bool = False
+        mirrors: List[str] = field(default_factory=list)
         cleanup_chunks_on_complete: bool = True
         pre_check_disk_space: bool = True
         direct_write: bool = False

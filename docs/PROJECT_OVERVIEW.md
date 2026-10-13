@@ -179,12 +179,12 @@ Imagine shipping a 1,000-page book across the country. The traditional approach 
 | **Language** | Python 3.10+ | Cross-platform, rich ecosystem, excellent HTTP libraries |
 | **HTTP Client** | `httpx` (async) | HTTP/2 support, connection pooling, async-native |
 | **Hashing** | `hashlib` (stdlib) | FIPS-compliant SHA-256, hardware-accelerated on modern CPUs |
-| **Concurrency** | `asyncio` + `aiofiles` | Non-blocking I/O for parallel chunk downloads |
+| **Concurrency** | `asyncio` (stdlib) | Parallel range requests. Blocking file I/O is offloaded with `asyncio.to_thread` rather than via `aiofiles` |
 | **State Persistence** | JSON files | Human-readable, no external database dependency |
-| **CLI Framework** | `click` | Declarative CLI with rich help text |
+| **CLI Framework** | `argparse` (stdlib) | No third-party dependency for the entry point |
 | **Logging** | `structlog` | Structured JSON logging for machine-parseable observability |
 | **Configuration** | `pydantic` + YAML | Type-safe configuration with validation |
-| **Testing** | `pytest` + `pytest-asyncio` | Industry-standard async test framework |
+| **Testing** | `unittest` (stdlib), run under `pytest` | `IsolatedAsyncioTestCase` covers async cases without `pytest-asyncio` |
 
 ---
 

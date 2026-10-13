@@ -7,7 +7,9 @@
 [![OpenSSF Scorecard](https://img.shields.io/badge/OpenSSF_Scorecard-Passing-blue.svg)](https://securityscorecards.dev/viewer/?url=github.com/PxA-Labs/ReliaDL)
 [![OpenSSF Best Practices](https://img.shields.io/badge/OpenSSF_Best_Practices-Passing-green.svg)](https://bestpractices.coreinfrastructure.org/projects/github.com/PxA-Labs/ReliaDL)
 
-**ReliaDL** is a production-grade, fault-tolerant parallel file download framework and high-throughput streaming engine. Designed for high-reliability data pipelines, enterprise infrastructure, and non-stationary channels, ReliaDL combines stochastic network optimization, per-chunk cryptographic integrity verification, corporate proxy tunneling, async rate limiting, and Prometheus observability.
+**ReliaDL** is a fault-tolerant parallel file download framework and streaming engine for data pipelines over unreliable or non-stationary links. It combines resumable chunked transfer, per-chunk SHA-256 integrity verification, corporate proxy tunneling, async rate limiting and Prometheus observability.
+
+> **Status: beta.** The download engine, resume, verification, rate limiting and proxy support are in use. The adaptive chunk-sizing and mirror-routing algorithms under `reliadl.algorithms` are implemented and unit-tested but are **not yet wired into the download path** — see [docs/ALGORITHMS.md](docs/ALGORITHMS.md) for the per-component status. No measured performance benchmarks are published yet.
 
 [PyPI Package](https://pypi.org/project/reliadl/) | [Documentation](docs/PROJECT_OVERVIEW.md) | [CLI Guide](docs/CLI_GUIDE.md) | [Release Notes](https://github.com/PxA-Labs/ReliaDL/releases) | [RFC Roadmap](https://github.com/PxA-Labs/ReliaDL/discussions/83) | [Issue Tracker](https://github.com/PxA-Labs/ReliaDL/issues)
 
@@ -17,11 +19,11 @@
 
 | Feature | Description | Architecture Component |
 | :--- | :--- | :--- |
-| **Cryptographic Integrity** | Per-chunk SHA-256 validation, homomorphic LtHash aggregation, and 4 KB Merkle tree segment localization | `reliadl.hash_verifier` |
+| **Cryptographic Integrity** | Streaming per-chunk SHA-256/384/512 validation with constant-time comparison; Merkle tree over chunk hashes in Ed25519-signed manifests | `reliadl.hash_verifier`, `reliadl.manifest` |
 | **Proxy Tunneling** | SOCKS5 (RFC 1928 / 1929) and HTTP CONNECT corporate proxy tunneling with destination-based TLS verification | `reliadl.adapters.proxy_adapter` |
 | **Traffic Pacing** | Token Bucket rate limiter with single-threaded reservation scheduling preventing thundering herd spikes | `reliadl.rate_limiter` |
 | **Observability** | Native Prometheus metrics catalog exporter and structured JSON logging engine | `reliadl.telemetry` & `reliadl.logger` |
-| **Stochastic Pacing** | Lyapunov-based dynamic chunk sizing (AdaChunk) and restless multi-armed bandit (Whittle index) scheduling | `reliadl.algorithms` |
+| **Adaptive Scheduling** *(library only)* | Closed-loop chunk sizing from measured bandwidth and loss (BL-DCS), EXP3.S adversarial-bandit mirror routing, straggler detection with range bisection | `reliadl.algorithms` |
 | **Cloud Adapters** | Plug-and-play streaming adapters for AWS S3, Google Cloud Storage (GCS), and Azure Blob Storage | `reliadl.adapters` |
 
 ---
@@ -148,7 +150,7 @@ ReliaDL includes a production CLI (`reliadl` or `python -m reliadl.main`) for au
 
 ```bash
 # 1. Parallel File Download
-reliadl download --url "https://example.com/dataset.tar.gz" --output "./downloads/dataset.tar.gz" --adachunk --whittle
+reliadl download --url "https://example.com/dataset.tar.gz" --output "./downloads/dataset.tar.gz" --adaptive-chunks
 
 # 2. High-Throughput Network & Crypto Benchmark
 reliadl benchmark --duration 10s --block-size 64
@@ -186,7 +188,7 @@ graph TB
     end
 
     subgraph ControlLayer["2. Optimization & Network Layer"]
-        AC["AdaChunk Optimizer (reliadl.algorithms.adaptive_chunker)"]
+        AC["BL-DCS Chunk Sizer (reliadl.algorithms.adaptive_chunker)"]
         RL["Token Bucket Rate Limiter (reliadl.rate_limiter)"]
         PA["Proxy Tunnel Adapter (reliadl.adapters.proxy_adapter)"]
     end
@@ -229,49 +231,57 @@ graph TB
 
 ```text
 ReliaDL/
-├── README.md                          # Project documentation entry point
-├── pyproject.toml                     # PEP 517/518 PyPI build configuration
-├── LICENSE                            # Apache 2.0 License
-├── requirements.txt                   # Dependency manifests
-│
-├── .github/
-│   ├── dependabot.yml                 # Automated weekly security updates
-│   └── workflows/
-│       ├── codeql.yml                 # CodeQL static security analysis
-│       ├── ci.yml                     # Continuous integration test matrix
-│       └── publish.yml                # PyPI Trusted Publisher (OIDC) workflow
-│
-├── docs/                              # Architecture documentation & research specifications
-│   ├── NOVEL_ALGORITHMS.md            # Formal mathematical formulations & proofs
-│   ├── ARCHITECTURE.md                # System design trade-offs
-│   ├── API_REFERENCE.md               # API documentation
-│   └── OBSERVABILITY.md               # Prometheus telemetry guide
-│
-├── src/                               # Core engine modules
-│   ├── adapters/                      # Transport & proxy adapters
-│   │   ├── proxy_adapter.py           # SOCKS5 & HTTP CONNECT corporate tunneling
-│   │   ├── s3_adapter.py              # AWS S3 cloud adapter
-│   │   ├── gcs_adapter.py             # Google Cloud Storage adapter
-│   │   └── azure_adapter.py           # Azure Blob Storage adapter
-│   ├── algorithms/                    # Stochastic optimization algorithms
-│   │   ├── adaptive_chunker.py        # AdaChunk Lyapunov optimizer
-│   │   ├── metrics_collector.py       # EWMA network estimator
-│   │   ├── mirror_bandit.py           # Whittle index bandit scheduler
-│   │   └── work_stealer.py            # Dynamic work stealing queue
-│   ├── hash_verifier.py               # Streaming SHA-256 & LtHash verifier
-│   ├── rate_limiter.py                # Token bucket bandwidth rate limiter
-│   ├── telemetry/                     # Prometheus telemetry & exporter
-│   ├── state_manager.py               # Atomic state file manager
-│   ├── file_assembler.py              # Zero-copy positional disk assembler
-│   ├── config.py                      # System configuration parser
-│   ├── exceptions.py                  # Custom taxonomy exceptions
-│   └── main.py                        # Command Line Interface (CLI)
-│
-└── tests/                             # Automated test suite (860+ tests passing)
-    └── unit/                          # Component unit tests
+|-- README.md                          # Project documentation entry point
+|-- pyproject.toml                     # PEP 517/518 PyPI build configuration
+|-- LICENSE                            # Apache 2.0 License
+|-- requirements.txt                   # Runtime dependencies
+|
+|-- .github/
+|   |-- dependabot.yml                 # Automated weekly dependency updates
+|   `-- workflows/                     # CI, CodeQL, docs, packaging, release, publish
+|
+|-- docs/                              # Architecture and usage documentation
+|   |-- ALGORITHMS.md                  # Implemented algorithms, provenance, references
+|   |-- ARCHITECTURE.md                # System design and trade-offs
+|   |-- API_REFERENCE.md               # Python SDK surface
+|   |-- PERFORMANCE.md                 # Analytical performance models
+|   `-- OBSERVABILITY.md               # Prometheus telemetry guide
+|
+|-- reliadl/                           # The package (flat layout; there is no src/)
+|   |-- adapters/                      # Transport, proxy and cloud adapters
+|   |   |-- proxy_adapter.py           # SOCKS5 and HTTP CONNECT tunneling
+|   |   |-- s3_adapter.py              # AWS S3 adapter
+|   |   |-- gcs_adapter.py             # Google Cloud Storage adapter
+|   |   `-- azure_adapter.py           # Azure Blob Storage adapter
+|   |-- algorithms/                    # Scheduling and sizing (library only; see ALGORITHMS.md)
+|   |   |-- adaptive_chunker.py        # BL-DCS closed-loop chunk sizing
+|   |   |-- metrics_collector.py       # EWMA network state estimator (RFC 6298)
+|   |   |-- mirror_bandit.py           # EXP3.S mirror router, circuit breaker, health
+|   |   |-- work_stealer.py            # Straggler detection and range bisection
+|   |   `-- task_deque.py              # Work-stealing deque (lock-based)
+|   |-- download_engine.py             # Parallel range-GET transfer engine
+|   |-- hash_verifier.py               # Streaming SHA-256/384/512 verification
+|   |-- manifest.py                    # Signed manifests, Merkle tree, sub-block validator
+|   |-- state_manager.py               # Atomic resume-state persistence
+|   |-- sparse_writer.py               # Positional sparse-file writer
+|   |-- file_assembler.py              # Chunk assembly
+|   |-- rate_limiter.py                # Token bucket rate limiter
+|   |-- telemetry/                     # Prometheus exporter
+|   |-- config.py                      # Configuration parsing and validation
+|   |-- exceptions.py                  # Error taxonomy
+|   |-- logger.py                      # Structured JSON logging
+|   |-- cli.py                         # Argument parsing and subcommands
+|   `-- main.py                        # Console entry point
+|
+`-- tests/
+    `-- unit/                          # Component unit tests
 ```
 
+> Test counts and coverage figures are deliberately not quoted here; see the CI
+> workflow for what actually runs.
+
 ---
+
 
 ## Security, Governance & Compliance
 
@@ -295,20 +305,24 @@ ReliaDL is executing a multi-phase distribution roadmap discussed in **[RFC Disc
 
 ---
 
-## Research Reference
+## Citing ReliaDL
 
-If you use ReliaDL in academic research or production system studies, please cite:
+There is no paper describing ReliaDL yet. A previous revision of this README
+contained a BibTeX entry for an arXiv preprint that does not exist; it has been
+removed. If you use ReliaDL, cite the software release you used:
 
 ```bibtex
-@article{reliadl2026,
-  title={{ReliaDL: Adaptive Fault-Tolerant Chunked Transfer with Homomorphic Verification and Stochastic Scheduling}},
-  author={Joshi, Purvansh and Mittal, Archit},
-  journal={arXiv preprint arXiv:2608.xxxxx},
-  year={2026},
-  publisher={PxA Labs},
-  url={https://github.com/PxA-Labs/ReliaDL}
+@software{reliadl,
+  title  = {{ReliaDL: A Fault-Tolerant Parallel File Download Engine}},
+  author = {Joshi, Purvansh and Mittal, Archit},
+  year   = {2026},
+  url    = {https://github.com/PxA-Labs/ReliaDL},
+  note   = {Version 0.3.0}
 }
 ```
+
+For the algorithms ReliaDL implements and the prior work they come from, see
+[docs/ALGORITHMS.md](docs/ALGORITHMS.md).
 
 ---
 

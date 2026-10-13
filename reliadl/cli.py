@@ -247,26 +247,34 @@ def run_inspect_state(args: argparse.Namespace) -> int:
 
     # Inspect Download State (.state)
     try:
-        state_mgr = StateManager(target_path.parent / target_path.name.replace(".state", ""))
-        snapshot = state_mgr.snapshot()
+        # StateManager has no snapshot(); it loads a DownloadState. The previous
+        # code called a method that does not exist, so this command failed every
+        # time it was run -- the broad except below reported it as a parse error.
+        state = StateManager().load(target_path)
+        completed = state.completed_chunks
 
-        data = {
-            "target_path": str(snapshot.get("target_path", "")),
-            "file_size": snapshot.get("file_size_bytes", 0),
-            "status": str(snapshot.get("status", "UNKNOWN")),
-            "total_chunks": snapshot.get("total_chunks", 0),
-            "completed_chunks": len(snapshot.get("completed_chunk_indices", [])),
-            "bytes_downloaded": snapshot.get("bytes_downloaded", 0),
-            "created_at": snapshot.get("created_at", ""),
-            "updated_at": snapshot.get("updated_at", ""),
+        data: dict[str, Any] = {
+            "target_path": state.target_path,
+            "file_size": state.file_size,
+            "status": state.status.value,
+            "total_chunks": state.total_chunks,
+            "completed_chunks": len(completed),
+            "pending_chunks": len(state.pending_chunks),
+            "failed_chunks": len(state.failed_chunks),
+            "bytes_downloaded": sum(c.size for c in completed),
+            "url": state.url,
+            # str() rather than the datetime itself: this dict is also emitted
+            # as JSON, and datetime is not serializable.
+            "created_at": str(state.created_at),
+            "updated_at": str(state.updated_at),
         }
 
         if as_json:
             print(json.dumps(data, indent=2))
             return 0
 
-        file_size = data["file_size"]
-        bytes_dl = data["bytes_downloaded"]
+        file_size = int(data["file_size"])
+        bytes_dl = int(data["bytes_downloaded"])
         pct = (bytes_dl / file_size * 100.0) if file_size > 0 else 0.0
 
         print("======================================================================")
@@ -279,6 +287,9 @@ def run_inspect_state(args: argparse.Namespace) -> int:
         print(f"Bytes Complete   : {bytes_dl:,} bytes ({pct:.1f}%)")
         print(f"Total Chunks     : {data['total_chunks']}")
         print(f"Completed Chunks : {data['completed_chunks']} / {data['total_chunks']}")
+        print(f"Pending Chunks   : {data['pending_chunks']}")
+        print(f"Failed Chunks    : {data['failed_chunks']}")
+        print(f"Source URL       : {data['url']}")
         print(f"Last Updated     : {data['updated_at']}")
         print("======================================================================\n")
         return 0
@@ -336,7 +347,10 @@ def run_doctor(args: argparse.Namespace) -> int:
 
     if platform.system() != "Windows":
         try:
+            # Unix-only module; the branch above excludes Windows at runtime, and
+            # mypy is pinned to platform = "linux" so it resolves here too.
             import resource
+
             soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
             if soft >= 1024:
                 print(f"[PASS] File Descriptor Limit Adequate (soft={soft}, hard={hard})")
@@ -493,6 +507,15 @@ def _engine_config(args: argparse.Namespace) -> DownloadConfig:
         download["chunk_size"] = args.chunk_size
     if getattr(args, "limit_rate", None) is not None:
         network["max_bandwidth"] = args.limit_rate
+    if getattr(args, "adaptive_chunks", False):
+        download["adaptive_chunk_sizing"] = True
+    if getattr(args, "adaptive_mirrors", False):
+        download["adaptive_mirror_routing"] = True
+    if getattr(args, "mirror", None):
+        # Naming mirrors is a request to use them, so it enables routing rather
+        # than silently recording URLs the engine would never consult.
+        download["mirrors"] = list(args.mirror)
+        download["adaptive_mirror_routing"] = True
     return get_download_config(
         config_path=getattr(args, "config", None),
         overrides={"download": download, "network": network},
@@ -646,8 +669,24 @@ def build_parser() -> argparse.ArgumentParser:
     p_dl = subparsers.add_parser("download", help="Execute parallel chunked file download")
     p_dl.add_argument("--url", required=True, help="Source URL")
     p_dl.add_argument("--output", "-o", required=True, help="Output file path")
-    p_dl.add_argument("--adachunk", action="store_true", help="Enable AdaChunk dynamic chunk optimization")
-    p_dl.add_argument("--whittle", action="store_true", help="Enable Whittle index mirror bandit scheduling")
+    # Scheduling policies. These select which algorithm the engine uses; the
+    # modules live in reliadl.algorithms. See docs/ALGORITHMS.md for status.
+    p_dl.add_argument(
+        "--adaptive-chunks",
+        action="store_true",
+        help="Size chunks from measured bandwidth, RTT and loss (BL-DCS) instead of a fixed size",
+    )
+    p_dl.add_argument(
+        "--adaptive-mirrors",
+        action="store_true",
+        help="Route range requests across mirrors with an EXP3.S adversarial bandit",
+    )
+    p_dl.add_argument(
+        "--mirror",
+        action="append",
+        metavar="URL",
+        help="Additional URL serving the same payload; repeatable. Implies --adaptive-mirrors",
+    )
     p_dl.add_argument("--expected-hash", "--sha256", dest="expected_hash", help="Expected SHA-256 of the whole file")
     _add_engine_arguments(p_dl)
 

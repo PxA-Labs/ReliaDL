@@ -14,86 +14,111 @@ Where `<start>` and `<end>` are 0-indexed byte offsets, inclusive.
 ### 1.2 Accept-Ranges Validation
 Before initiating ReliaDL downloads, the client must verify server support via the `Accept-Ranges: bytes` response header from a `HEAD` request. If unsupported, ReliaDL falls back to single-stream download without range parameters.
 
-## 2. AdaChunk: Adaptive Chunk Sizing
+## 2. BL-DCS: Closed-Loop Chunk Sizing
 
-ReliaDL employs AdaChunk, an adaptive chunk sizing algorithm based on online optimization via a Lyapunov drift-plus-penalty framework, superseding static chunk sizing.
+> **Status: library only.** This controller is implemented in
+> `reliadl/algorithms/adaptive_chunker.py` and unit-tested, but it is **not yet
+> called by the download engine**, which uses a fixed `chunk_size_bytes`.
+>
+> Earlier revisions of this section described a Lyapunov drift-plus-penalty
+> formulation with a virtual queue and an O(1/V) optimality theorem. **No such
+> algorithm exists in the source**, and the theorem was a restatement of a standard
+> result (Neely, 2010) rather than a proof about this system. The description below
+> is what the code does.
 
 ### 2.1 Problem Formulation
-The goal is to dynamically select chunk sizes $B_t$ for each slot $t$ to minimize expected retransmission costs while maintaining a minimum target goodput $G_{\text{min}}$.
 
-The network state vector at time $t$ is defined as:
-$s_t = (\text{RTT}_t, \sigma_{\text{RTT}}, p_t, G_t, \text{BDP}_t)$
-Where $p_t$ is the packet loss rate and BDP is the Bandwidth-Delay Product.
+Small chunks pay per-request overhead on every range GET; large chunks waste more
+bytes when a chunk must be re-fetched. Minimizing per-byte cost over chunk size `S`:
 
-### 2.2 Lyapunov Optimization Framework
-We define a virtual queue $Q_t$ to track goodput deficit:
-$Q_{t+1} = \max(Q_t - G(B_t, s_t) + G_{\text{min}}, 0)$
-
-The per-slot optimization minimizes the drift-plus-penalty:
-$B_t^* = \text{argmin}_B \left[ V \cdot C(B, s_t) - Q_t \cdot G(B, s_t) \right]$
-Where $V$ is a control parameter weighting cost minimization against queue stability.
-
-#### Retransmission Cost Model
-$C(B, s) = B \cdot (1 - (1-p)^{B/\text{MSS}})$
-
-#### Goodput Model
-$G(B, s) = \frac{B \cdot (1-p_{\text{retry}})}{T_{\text{dl}} + T_{\text{overhead}}}$
-
-### 2.3 AdaChunk Pseudocode
-```python
-def optimize_chunk_size(V, Q, s_t, B_candidates):
-    best_B = None
-    min_objective = float('inf')
-    
-    for B in B_candidates:
-        cost = compute_cost(B, s_t)
-        goodput = compute_goodput(B, s_t)
-        
-        objective = V * cost - Q * goodput
-        if objective < min_objective:
-            min_objective = objective
-            best_B = B
-            
-    return best_B
-
-def update_queue(Q_t, G_t, G_min):
-    return max(Q_t - G_t + G_min, 0)
+```
+J(S) = tau_overhead * mu / S  +  p_seg * S / MSS
 ```
 
-### 2.4 Convergence Proof Sketch
-By bounding the Lyapunov drift $\Delta(L) \leq B + Q_t (G_{\text{min}} - \mathbb{E}[G(B_t, s_t)])$, it can be shown via standard drift-plus-penalty analysis that the time-average cost satisfies $\limsup_{T \to \infty} \frac{1}{T} \sum_{t=0}^{T-1} \mathbb{E}[C(B_t)] \leq C^* + O(1/V)$, achieving an $O(1/V)$ optimality gap while ensuring mean rate stability of the virtual queue.
+Setting `dJ/dS = 0` gives a square-root optimum. This is the standard tradeoff
+between a fixed per-batch cost and a cost linear in batch size; it is not novel.
+
+### 2.2 Controller
+
+```
+S* = clamp( gamma * sqrt( tau_overhead * mu_k * MSS / (8 * p_k + eps) )
+            + lambda * mu_k * tau_k,
+            S_min, S_max )
+```
+
+The `MSS` factor makes the radicand a byte-squared quantity so the root yields
+bytes. The second term scales with the bandwidth-delay product so a fast, clean path
+is not throttled by request overhead. The result is quantized to a power of two.
+
+The controller is **stateless**: each decision is a pure function of the current
+smoothed network snapshot, with no history carried between epochs.
+
+### 2.3 Per-Segment Loss Rescaling
+
+The metrics collector observes failures per *chunk*; the loss model is expressed per
+*segment*. The conversion applied before the formula is evaluated:
+
+```
+p_seg = 1 - (1 - p_chunk) ** (MSS / S_observed)
+```
+
+### 2.4 Known Open Issues
+
+- `gamma` and `lambda` both default to `1.0` and have never been swept or fitted.
+- The factor `8.0` in the denominator is not present in the derivation and is
+  unexplained; it may be a bits/bytes error.
+- `tau_overhead` defaults to 25 ms with no measured source.
+- There is **no convergence proof and no optimality bound** for this controller.
 
 ### 2.5 Heuristic Chunk Size Guidelines
-While AdaChunk determines precise sizes dynamically, initial candidate sets are governed by:
+When BL-DCS is enabled it computes sizes from measured state; the static defaults and operator guidance are:
 - High speed / low loss: 10MB - 50MB
 - Moderate speed / moderate loss: 2MB - 10MB
 - Poor connection / high loss: 512KB - 2MB
 
 ## 3. Cryptographic Verification
 
-ReliaDL utilizes a dual-layer cryptographic verification system incorporating SHA-256 for per-chunk verification and LtHash for $O(1)$ whole-file verification, alongside Sub-Chunk Merkle Localization for fine-grained corruption recovery.
+### 3.1 Per-Chunk Verification
 
-### 3.1 Dual-Layer Verification
-1. **Per-Chunk Verification**: SHA-256 hash validation for individual chunk integrity.
-2. **Whole-File Verification (LtHash)**: A lattice-based homomorphic hash function defined as $H(x) = A \cdot x \bmod p$.
-   - **Homomorphic Property**: $H(x \Vert y) = H(x) + H(y)$.
-   - **Performance**: Enables $O(1)$ assembly verification without re-reading the assembled file on disk. The sum of chunk LtHashes equals the LtHash of the entire file.
-   - **Security**: Collision resistance is based on the Short Integer Solution (SIS) problem hardness.
+Each chunk is verified against a SHA-256 digest (SHA-384 and SHA-512 are also
+supported) computed incrementally over a 64 KB streaming buffer. Digests are compared
+with `hmac.compare_digest`, which is constant-time. MD5 and SHA-1 are rejected by
+policy (`hash_verifier.py:30`).
 
-### 3.2 Sub-Chunk Merkle Localization
-To avoid re-downloading entire corrupt chunks, ReliaDL constructs hierarchical Merkle trees within chunks.
+On a mismatch the **entire chunk is discarded and re-fetched**. There is currently no
+sub-chunk localization on the download path.
 
-#### Tree Construction
-- Leaf node size: $s = 4096$ bytes.
-- Tree depth: $h = \lceil \log_2(B/s) \rceil$ levels.
+### 3.2 Whole-File Verification
 
-#### Localization Algorithm
-1. The server provides the Merkle root of the chunk.
-2. Upon verification failure, the client requests intermediate nodes to localize the mismatch via binary search.
-3. Requires $O(\log(B/s))$ hash comparisons.
+Whole-file verification re-reads the assembled file from disk and recomputes the
+digest: an O(N) I/O pass (`hash_verifier.py:179-186`, invoked at
+`download_engine.py:535`).
 
-#### Expected Retransmission Savings
-$E[S] = B - (s \cdot \text{num\_errors} + \text{overhead} \cdot \log(B/s))$
+> Earlier revisions of this section specified a second layer using LtHash, a
+> lattice-based homomorphic hash giving O(1) whole-file verification. **No homomorphic
+> hashing is implemented.** If it is added later, it must be cited to Bellare and
+> Micciancio (1997) and Lewi et al. (IACR ePrint 2019/227), and the O(1) claim must be
+> stated precisely: aggregation is O(1) only *given* per-chunk hashes already computed
+> in O(N).
+
+### 3.3 Merkle Tree over Chunk Hashes
+
+`reliadl/manifest.py` builds a binary Merkle tree over chunk hashes with domain
+separation, `SHA-256(0x00 || leaf)` and `SHA-256(0x01 || left || right)`. Inclusion
+proofs are available via `get_proof` / `verify_inclusion`. The root is carried in
+RFC 8785-canonicalized, Ed25519-signed manifests.
+
+**Known weakness.** Odd node counts duplicate the last node (`manifest.py:890`) and the
+root does not commit to the leaf count, so two different chunk lists can share a root
+(the CVE-2012-2459 shape). Since the root is signed, this must be fixed before the root
+is relied on as a security boundary.
+
+**Scope.** The tree is used by the manifest and by the offline `reliadl hash-tree`
+audit command. `SubBlockStreamValidator` (`manifest.py:1001-1160`) aborts a stream at
+the first bad 64 KB sub-block but has **no production call site**. Sub-chunk
+*localization* — binary search down the tree to the corrupt segments — is **not
+implemented**; earlier revisions of this document specified it as though it were.
+
 
 ## 4. State Management
 
@@ -106,10 +131,9 @@ Required Fields:
 - `url`: Target resource URL
 - `file_size`: Total bytes
 - `chunk_size`: Base or initial chunk size
-- `checksum`: Target whole-file hash (LtHash/SHA-256)
+- `checksum`: Target whole-file SHA-256 hash
 - `algorithm`: Hash algorithm identifier
 - `chunks`: Array of chunk metadata objects
-- `adachunk_state`: Network history matrix and virtual queue value
 
 Chunk Metadata Object:
 - `index`: Sequential identifier
@@ -117,46 +141,59 @@ Chunk Metadata Object:
 - `end`: Byte offset
 - `status`: State indicator (PENDING, DOWNLOADING, COMPLETED, CORRUPT)
 - `sha256`: Expected chunk hash
-- `lthash_value`: Expected LtHash component
 - `merkle_root`: Sub-chunk Merkle tree root
-- `parity_group_id`: ID for predictive parity recovery
 - `temp_file`: Path to temporary storage
 
-## 5. Predictive Parity Injection
+## 5. Forward Error Correction (Not Implemented)
 
-ReliaDL uses predictive forward error correction via lightweight XOR parity chunks to enable zero-RTT recovery.
+> Earlier revisions of this section specified predictive XOR parity injection driven
+> by a Gilbert-Elliott channel estimator, with zero-RTT recovery. **No forward error
+> correction of any kind is implemented in ReliaDL.** The section has been removed
+> rather than kept as a specification, because nothing in the source corresponds to it.
+>
+> Loss recovery is handled by retry with exponential backoff and jitter
+> (`download_engine.py:643-652`).
 
-### 5.1 Gilbert-Elliott Channel Model
-Network burst packet loss is modeled using a two-state Markov chain (Good $G$, Bad $B$):
-- Transition probabilities: $p_{GB}$ and $p_{BG}$.
-- Error probabilities: $e_G = 0$, $e_B = 1$.
 
-### 5.2 Parity Chunk Construction
-For a group of $k$ data chunks, a parity chunk is constructed:
-$P_j = \bigoplus_{i=1}^{k} \text{data\_chunk}_i$
+## 6. EXP3.S Mirror Routing
 
-### 5.3 Adaptive Injection Rate
-The injection rate $r^*(t)$ (number of parity blocks per group) is dynamically adjusted based on the estimated loss probability $\hat{p}(t)$:
-$r^*(t) = \left\lceil \frac{k \cdot \hat{p}(t)}{1 - \hat{p}(t)} \right\rceil$
+> **Status: library only.** Implemented in `reliadl/algorithms/mirror_bandit.py`;
+> not yet called by the download engine.
+>
+> Earlier revisions described a Whittle-index restless-bandit scheduler with an
+> indexability theorem. **The router is EXP3.S** (Auer, Cesa-Bianchi, Freund and
+> Schapire, 2002), a different algorithm class: there is no subsidy parameter, no
+> two-action MDP and no indexability argument anywhere in the source.
 
-### 5.4 Zero-RTT Recovery Protocol
-If a single chunk within a parity group fails verification and a parity chunk is available, the client can reconstruct the corrupted chunk via XOR without issuing a retransmission request (zero additional RTT).
+### 6.1 Formulation
 
-## 6. Whittle Index Scheduler
+Mirror selection is an adversarial bandit: only the reward of the mirror actually
+used is observed, and throughput is non-stationary and driven by factors outside our
+control (other tenants, routing, cache state).
 
-Worker-to-source allocation is formulated as a Restless Multi-Armed Bandit (RMAB) problem, solved using the Whittle Index policy to mitigate stragglers and optimize parallel downloads.
+```
+p_{m,t}   = (1 - eta) * w_{m,t} / sum_j w_{j,t}  +  eta / M
+r_hat     = r / p_{m,t}
+w_{m,t+1} = w_{m,t} * exp(eta * r_hat / M)
+```
 
-### 6.1 RMAB Formulation
-Each chunk represents an arm with an evolving state based on download progress and connection quality.
+Weights are maintained in log space and rescaled each round so the largest is 1,
+which leaves the selection distribution unchanged while keeping every exponential
+representable over long horizons.
 
-### 6.2 Whittle Index Computation
-For each chunk, the Whittle index $W(s)$ is the subsidy required to make the scheduler indifferent between serving and not serving the chunk in state $s$. Active workers are assigned to the chunks with the highest Whittle indices.
+### 6.2 Non-Stationary Tracking
 
-### 6.3 Indexability Conditions
-The system assumes indexability holds, meaning the set of states for which it is optimal to remain idle monotonically increases with the subsidy.
+The EXP3.S decay mixes weights toward the mean each round,
+`w_m <- (1 - alpha) * w_m + (alpha / M) * sum_j w_j`, bounding how much evidence any
+arm can accumulate. `alpha = 0` recovers classic EXP3. The default
+`alpha = 0.0005` and the `alpha ~ 1/T` relationship are backed by a measured regret
+sweep documented in [ALGORITHMS.md](ALGORITHMS.md#2-exp3s-mirror-routing).
 
-### 6.4 Straggler Mitigation Protocol
-Chunks assigned to workers exhibiting prolonged low throughput (triggering state transitions in the RMAB) have their active Whittle index re-evaluated. If preempted, the chunk is returned to the pool for reallocation.
+`eta` defaults to 0.1 and has **not** been tuned.
+
+### 6.3 Straggler Mitigation Protocol
+
+A chunk is a straggler when its projected time-to-completion, `remaining / throughput`, exceeds a multiple of the minimum across *active* transfers; idle workers are excluded from the baseline. The outstanding range of a straggler is split at the midpoint of its unfetched remainder, so already-received bytes are not re-requested (`algorithms/work_stealer.py`).
 
 ## 7. Storage and Assembly
 
@@ -168,7 +205,7 @@ Chunks assigned to workers exhibiting prolonged low throughput (triggering state
 1. Verify all chunk statuses are COMPLETED.
 2. Initialize target file.
 3. Iteratively append each temporary file in index order.
-4. Verify homomorphic LtHash aggregation sum matches the whole-file LtHash.
+4. Re-read the assembled file and verify its whole-file SHA-256 digest.
 5. If verified, remove temporary files and state file.
 6. If verification fails, identify corrupt chunk via metadata and revert to DOWNLOADING state.
 
@@ -188,20 +225,23 @@ Workers must implement flow control when writing to disk to prevent memory exhau
 - **Transient Network Errors**: Connection resets, timeouts. Action: Retry with backoff.
 - **Protocol Errors**: 403 Forbidden, 404 Not Found. Action: Abort download.
 - **Range Errors**: 416 Range Not Satisfiable. Action: Re-evaluate state, potentially abort.
-- **Integrity Errors**: Hash mismatch. Action: Sub-chunk Merkle localization or Parity recovery.
+- **Integrity Errors**: Chunk SHA-256 mismatch. Action: discard the whole chunk and re-fetch it under the retry policy.
 - **I/O Errors**: Disk full, permissions. Action: Pause download, alert user.
 
 ## 10. Performance Tuning Variables
 
-- `WORKER_COUNT`: Maximum concurrent download streams.
-- `BDP_ESTIMATE_INITIAL`: Initial Bandwidth-Delay Product estimate.
-- `LYAPUNOV_V`: V parameter for AdaChunk drift-plus-penalty.
-- `MAX_RETRIES`: Hard limit on transient network error retries.
-- `PARITY_GROUP_SIZE`: $k$ parameter for Predictive Parity (default 8).
+- `max_parallel_workers`: Maximum concurrent download streams.
+- `chunk_size_bytes`: Fixed chunk size used by the engine today (BL-DCS is not yet wired in).
+- `max_retries`, `retry_base_delay_seconds`, `retry_backoff_factor`, `retry_jitter_factor`:
+  Transient-failure retry policy.
+- `connect_timeout_seconds`, `read_timeout_seconds`: HTTP timeouts.
+- BL-DCS coefficients (`gamma`, `lambda`, `overhead_seconds`) and the EXP3.S parameters
+  (`eta`, `decay`) are constructor arguments on the library classes, not yet exposed as
+  engine configuration.
 
-## 10. Error Handling Specification
+## 11. Error Handling Specification
 
-### 10.1 Error Categories
+### 11.1 Error Categories
 
 | Category | Examples | Retry? | User Action |
 |---|---|---|---|
@@ -213,7 +253,7 @@ Workers must implement flow control when writing to disk to prevent memory exhau
 | **State** | Corrupted state file | Partial | May need to restart download |
 | **Server** | Range not supported, file changed | No | Fall back or restart |
 
-### 10.2 Error Response Format
+### 11.2 Error Response Format
 
 All errors include structured context for debugging:
 
@@ -237,21 +277,21 @@ All errors include structured context for debugging:
 
 ---
 
-## 11. Security Specification
+## 12. Security Specification
 
-### 11.1 TLS Requirements
+### 12.1 TLS Requirements
 
 - TLS 1.2+ required (TLS 1.0/1.1 rejected)
 - Certificate verification enabled by default
 - Certificate pinning available via configuration
 
-### 11.2 Hash Security
+### 12.2 Hash Security
 
 - SHA-256 is the minimum acceptable hash algorithm
 - Hash comparisons use constant-time comparison (`hmac.compare_digest`)
 - No support for weak algorithms (MD5, SHA-1) even in non-security contexts
 
-### 11.3 File Permissions
+### 12.3 File Permissions
 
 ```python
 # Chunk files: owner read/write only
@@ -266,7 +306,7 @@ OUTPUT_FILE_PERMISSIONS = None  # Use system default
 
 ---
 
-## 12. Platform Compatibility
+## 13. Platform Compatibility
 
 | Platform | Python Version | File System | Atomic Rename | Tested |
 |---|---|---|---|---|
@@ -283,15 +323,15 @@ OUTPUT_FILE_PERMISSIONS = None  # Use system default
 
 ---
 
-## 13. Direct Sparse File Writing Specification
+## 14. Direct Sparse File Writing Specification
 
 When `--direct-write` is enabled, ChunkGuard bypasses the temporary chunk file staging directory and directly writes verified byte buffers into pre-allocated sparse target files:
 
-### 13.1 Pre-Allocation Protocol
+### 14.1 Pre-Allocation Protocol
 1. **POSIX Systems (Linux/macOS)**: Uses `posix_fallocate(fd, 0, file_size)` to allocate contiguous disk blocks and prevent mid-transfer disk-full crashes (`ENOSPC`).
 2. **Windows (NTFS)**: Uses Win32 `SetFileInformationByHandle` or `SetFileValidData` for fast uninitialized file pre-allocation.
 
-### 13.2 Concurrent Direct Writing (`os.pwrite`)
+### 14.2 Concurrent Direct Writing (`os.pwrite`)
 Each worker writes directly to its chunk offset using positional write operations:
 
 ```python
@@ -305,9 +345,9 @@ def write_chunk_direct(fd: int, start_byte: int, data: bytes) -> int:
 
 ---
 
-## 14. Bandwidth Throttling Specification (Token Bucket)
+## 15. Bandwidth Throttling Specification (Token Bucket)
 
-### 14.1 Mathematical Model
+### 15.1 Mathematical Model
 Let $R$ be the configured rate limit (bytes/sec) and $C = 2 \times R$ be the bucket capacity.
 * At time $t$, elapsed time $\Delta t = t - t_{\text{last}}$.
 * Tokens added: $T_{\text{new}} = \min(C, T_{\text{current}} + R \cdot \Delta t)$.
@@ -317,7 +357,7 @@ Let $R$ be the configured rate limit (bytes/sec) and $C = 2 \times R$ be the buc
 
 ---
 
-## 15. Cross-References
+## 16. Cross-References
 
 * For full Manifest details: see [MANIFEST_SPECIFICATION.md](MANIFEST_SPECIFICATION.md)
 * For Cloud Protocol Adapters: see [CLOUD_ADAPTERS.md](CLOUD_ADAPTERS.md)
