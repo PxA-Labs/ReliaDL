@@ -77,10 +77,33 @@ digests the corrupt chunk is repaired and the transfer completes every time.
 | `routing+localization` | 33.3 MB/s | **6.1%** | **18.6%** |
 
 Routing costs about 20% of goodput and returns a 7x reduction in wasted bytes.
-Nothing was added to make this happen: EXP3.S already scores a failed request as
-zero reward, and a chunk that fails verification is a failed request, so the
-router demotes a corrupting mirror for the same reason it demotes a broken one.
 The same pattern holds on `flaky` (45.5% versus 100%).
+
+**Which mechanism does the work, corrected.** An earlier version of this document
+credited the bandit: EXP3.S scores a failed request as zero reward, a chunk that
+fails verification is a failed request, so the router should demote a corrupting
+mirror for the same reason it demotes a broken one. That reasoning is wrong, and
+an ablation over the shipped implementation shows it. Against three mirrors where
+the corrupting one is twice as fast and corrupts 40% of what it serves, averaged
+over 40 seeded trials of 400 requests:
+
+| Mechanism | Share of requests to the corrupting mirror |
+| :--- | ---: |
+| Integrity-aware reward only (EXP3.S) | **45.5%** |
+| Reward + consecutive-failure breaker | **5.4%** |
+
+Uniform allocation over three mirrors would be 33%, so the reward alone does not
+merely fail to demote the bad mirror -- it actively *prefers* it. The reason is
+that expected reward still favours it: a mirror delivering `r_f` but corrupting a
+fraction `q` beats an honest mirror delivering `r_h` whenever `q < 1 - r_h/r_f`,
+which for a mirror twice as fast means it can corrupt up to half of everything it
+serves and remain the best arm.
+
+What displaces it is the circuit breaker, which reacts to the *rate* of
+consecutive failures rather than to the average reward. The general lesson is
+that an average-reward learner is the wrong instrument for an integrity fault,
+because integrity failures are not noise in the reward but a property the reward
+deliberately averages away.
 
 ### 3. Mirror routing wins when the origin degrades and loses when it is already best
 
