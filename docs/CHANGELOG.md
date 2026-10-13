@@ -12,15 +12,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Features
 - **ci**: Upgrade Conventional Commit changelog generator and add auto release log workflow ([#110](https://github.com/PxA-Labs/ReliaDL/pull/110))
 - **dist**: System package manager distribution (Homebrew, WinGet, Scoop, DEB, RPM)
+- Sub-block Merkle localization on the download path
+- Reproducible benchmark harness, and two engine bugs it found
+- Concurrency-constrained chunk sizing, and real CI gates
+- Baseline comparison harness, and the pacing bug it exposed
 
 ### Bug Fixes
 - **packaging**: Sync Dockerfile, reliadl.spec, and mkdocs.yml with master and reliadl package structure
 - **ci**: Resolve template variables for nFPM in packages.yml
 - **packaging**: Remove Markdown changelog parsing from nFPM spec and bundle as doc
+- Reconcile documentation with implementation, wire algorithms into the engine
+- Scope the PR placeholder check to our own source
+- Pin mypy to platform = linux so the check is deterministic
 
 ### Documentation
 - **release**: Add dedicated release log file and release log generator script
 - **agents**: Enforce archittmittal-only GitHub account rule
+- Correct dependency claims; surface silently swallowed state errors
+- Evaluation results from 115 seeded runs
 
 ### Maintenance & Dependencies
 - **deps**: Update mkdocs-material requirement from >=9.5.0 to >=9.7.7
