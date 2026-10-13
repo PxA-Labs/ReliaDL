@@ -21,7 +21,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, Sequence, Union
 
 import httpx
 
@@ -56,6 +56,7 @@ from reliadl.models import (
     ProgressReport,
 )
 from reliadl.rate_limiter import TokenBucketRateLimiter
+from reliadl.scheduling import DEFAULT_PLAN_BATCH, MirrorSelection, TransferScheduler
 from reliadl.sparse_writer import SparseFileWriter
 from reliadl.state_manager import StateManager
 
@@ -83,6 +84,11 @@ class RemoteFileInfo:
         if self.etag and not self.etag.startswith("W/"):
             return self.etag
         return self.last_modified
+
+
+def _planned_end(state: DownloadState) -> int:
+    """First byte after the last chunk the state file already covers."""
+    return max((c.end_byte + 1 for c in state.chunks), default=0)
 
 
 def plan_chunks(file_size: int, chunk_size: int) -> list[ChunkState]:
@@ -185,6 +191,18 @@ class DownloadEngine:
         # tracked separately so a retried chunk does not count twice.
         self._in_flight: dict[int, int] = {}
         self._state: Optional[DownloadState] = None
+        # Checkpointing is serialized and rate-limited. Serialized because every
+        # worker writes the same DownloadState object to the same path, so two
+        # concurrent saves would interleave; rate-limited because a checkpoint
+        # fsyncs the output file and rewrites the whole state JSON, and doing that
+        # once per chunk per worker stalls every other worker behind the I/O.
+        self._checkpoint_lock = asyncio.Lock()
+        self._chunks_since_checkpoint = 0
+        self._last_checkpoint_at = 0.0
+        # Built per transfer in _run, because it is sized from the file.
+        self._scheduler: Optional[TransferScheduler] = None
+        # chunk index -> mirrors that already failed this chunk, this session only
+        self._failed_mirrors: dict[int, list[str]] = {}
         self._reset_progress()
 
     @property
@@ -228,8 +246,13 @@ class DownloadEngine:
                 etag=info.etag,
                 output_path=str(part_path),
                 status=DownloadStatus.DOWNLOADING,
-                chunks=plan_chunks(info.size, self._config.chunk_size_bytes),
+                chunks=[],
             )
+            # The scheduler owns the chunk partition from here on. With both
+            # policies off it returns the same fixed partition plan_chunks()
+            # produced, so the default path is unchanged.
+            self._scheduler = self._build_scheduler(url, info.size)
+            state.chunks = self._scheduler.plan_initial()
             # A leftover .part from an abandoned session holds unrelated bytes.
             part_path.unlink(missing_ok=True)
             writer = SparseFileWriter(
@@ -270,6 +293,13 @@ class DownloadEngine:
             writer = SparseFileWriter(part_path, state.file_size, check_disk_space=False)
             await asyncio.to_thread(self._revalidate_chunks, state, writer)
             state.status = DownloadStatus.DOWNLOADING
+            # A resumed session keeps the boundaries already recorded in the
+            # state file; adaptive sizing only applies to the part of the file
+            # that was never planned, so the planner is advanced past what the
+            # earlier session covered.
+            self._scheduler = self._build_scheduler(
+                state.url, state.file_size, planned_through=_planned_end(state)
+            )
             return await self._run(client, info, state, path, writer)
 
     async def probe(self, client: httpx.AsyncClient, url: str) -> RemoteFileInfo:
@@ -323,6 +353,36 @@ class DownloadEngine:
             raise _transport_error(err, url) from err
 
     # ── Session orchestration ──────────────────────────────────────────────
+
+    def _build_scheduler(
+        self,
+        url: str,
+        file_size: int,
+        *,
+        planned_through: int = 0,
+    ) -> TransferScheduler:
+        """
+        Construct the scheduling seam for one transfer.
+
+        ``planned_through`` is the first byte not yet covered by an existing
+        chunk plan, which is non-zero only on resume.
+        """
+        scheduler = TransferScheduler(
+            origin_url=url,
+            file_size=file_size,
+            fixed_chunk_size=self._config.chunk_size_bytes,
+            adaptive_chunk_sizing=getattr(self._config, "adaptive_chunk_sizing", False),
+            adaptive_mirror_routing=getattr(self._config, "adaptive_mirror_routing", False),
+            mirrors=getattr(self._config, "mirrors", ()) or (),
+            hash_algorithm=self._config.hash_algorithm,
+            # Never plan fewer chunks per batch than there are workers, or the
+            # pool would start partly idle and the first refill would be a
+            # thundering herd of workers all finding an empty queue.
+            plan_batch=max(DEFAULT_PLAN_BATCH, self._config.max_parallel_workers),
+        )
+        if planned_through:
+            scheduler.advance_to(planned_through)
+        return scheduler
 
     async def _run(
         self,
@@ -400,15 +460,20 @@ class DownloadEngine:
             try:
                 chunk = queue.get_nowait()
             except asyncio.QueueEmpty:
+                # With adaptive sizing the file is partitioned lazily, so an
+                # empty queue means "nothing planned yet", not "nothing left".
+                if self._refill_queue(queue, state):
+                    continue
                 return
             self._active_workers += 1
             try:
                 await self._download_chunk_with_retries(client, info, chunk, state.hash_algorithm, writer)
             finally:
                 self._active_workers -= 1
-            # The state file may only claim bytes that are durable on disk.
-            writer.sync()
-            self._state_manager.save(state, state_path)
+            # The state file may only claim bytes that are durable on disk, so a
+            # checkpoint always fsyncs before it saves. See _maybe_checkpoint for
+            # why this does not happen on every chunk.
+            await self._maybe_checkpoint(state, state_path, writer)
 
     async def _download_chunk_with_retries(
         self,
@@ -419,26 +484,76 @@ class DownloadEngine:
         writer: SparseFileWriter,
     ) -> None:
         max_attempts = max(1, self._config.max_retries_per_chunk)
+        scheduler = self._scheduler
         while True:
             chunk.mark_in_progress()
+            # A failed mirror is excluded from the retry so the same broken edge
+            # is not immediately chosen again; the breaker handles the longer-term
+            # demotion, this only avoids wasting the very next attempt.
+            selection = await self._select_mirror(exclude=self._failed_mirrors.get(chunk.index, ()))
+            started = time.monotonic()
             try:
-                digest = await self._fetch_chunk(client, info, chunk, algorithm, writer)
+                digest = await self._fetch_chunk(
+                    client, info, chunk, algorithm, writer, url=selection.url if selection else None
+                )
             except ReliaDLError as err:
+                elapsed = time.monotonic() - started
                 self._in_flight.pop(chunk.index, None)
+                if scheduler is not None:
+                    scheduler.record_failure(selection)
+                    if selection is not None and selection.mirror_id:
+                        self._failed_mirrors.setdefault(chunk.index, []).append(selection.mirror_id)
                 if not err.is_retryable or chunk.retries + 1 >= max_attempts:
                     chunk.mark_abandoned(str(err))
                     logger.error("chunk.abandoned", chunk=chunk.index, attempts=chunk.retries + 1, error=str(err))
                     raise
                 chunk.mark_failed(str(err))
                 delay = self._backoff_delay(chunk.retries, err)
-                logger.warning("chunk.retry", chunk=chunk.index, attempt=chunk.retries, delay=round(delay, 2), error=str(err))
+                logger.warning(
+                    "chunk.retry",
+                    chunk=chunk.index,
+                    attempt=chunk.retries,
+                    delay=round(delay, 2),
+                    seconds=round(elapsed, 3),
+                    error=str(err),
+                )
                 await asyncio.sleep(delay)
                 continue
+            elapsed = time.monotonic() - started
+            if scheduler is not None:
+                # The measured transfer feeds both policies: the bandit scores the
+                # mirror, and the chunk sizer reads the same throughput estimate.
+                scheduler.record_success(
+                    selection,
+                    bytes_transferred=chunk.size,
+                    duration_seconds=elapsed,
+                )
             chunk.mark_complete(digest)
+            self._failed_mirrors.pop(chunk.index, None)
             self._in_flight.pop(chunk.index, None)
             self._completed_bytes += chunk.size
             self._emit_progress(force=True)
             return
+
+    async def _select_mirror(self, exclude: Sequence[str] = ()) -> Optional[MirrorSelection]:
+        """
+        Pick a mirror, waiting out breaker cooldown if every one is open.
+
+        The dispatcher returns None when all mirrors are cooling down. That is a
+        wait condition, not a failure, so this sleeps for the shortest remaining
+        cooldown and asks again rather than failing the chunk.
+        """
+        scheduler = self._scheduler
+        if scheduler is None:
+            return None
+        while not self._shutdown.is_set():
+            selection = scheduler.select_mirror(exclude=exclude)
+            if selection is not None:
+                return selection
+            wait = max(0.05, min(scheduler.seconds_until_retry, 5.0))
+            logger.debug("mirror.cooldown", seconds=round(wait, 2))
+            await asyncio.sleep(wait)
+        return None
 
     async def _fetch_chunk(
         self,
@@ -447,7 +562,12 @@ class DownloadEngine:
         chunk: ChunkState,
         algorithm: str,
         writer: SparseFileWriter,
+        url: Optional[str] = None,
     ) -> str:
+        # The mirror router may send this request somewhere other than the origin
+        # the session was opened against; everything else about the request,
+        # including the If-Range validator, is unchanged.
+        target_url = url or info.url
         headers = {"Range": f"bytes={chunk.start_byte}-{chunk.end_byte}"}
         if info.if_range:
             headers["If-Range"] = info.if_range
@@ -455,8 +575,9 @@ class DownloadEngine:
         hasher = StreamingHashVerifier(algorithm)
         offset = chunk.start_byte
         self._in_flight[chunk.index] = 0
+        request_started = time.monotonic()
         try:
-            async with client.stream("GET", info.url, headers=headers) as response:
+            async with client.stream("GET", target_url, headers=headers) as response:
                 if response.status_code == 200:
                     # A 200 to a ranged request means the server ignored the
                     # range, or If-Range failed because the file changed.
@@ -464,14 +585,14 @@ class DownloadEngine:
                         raise PreconditionFailedError(
                             f"Remote file changed during download (If-Range {info.if_range} no longer matches)",
                             etag=response.headers.get("etag"),
-                            url=info.url,
+                            url=target_url,
                         )
                     raise RangeNotSupportedError(
                         f"Server ignored the byte range for chunk {chunk.index}",
-                        url=info.url,
+                        url=target_url,
                     )
                 if response.status_code != 206:
-                    raise _http_error(response, info.url)
+                    raise _http_error(response, target_url)
 
                 parsed = _parse_content_range(response.headers.get("content-range"))
                 if parsed is None or parsed[:2] != (chunk.start_byte, chunk.end_byte):
@@ -479,32 +600,68 @@ class DownloadEngine:
                         f"Chunk {chunk.index}: requested bytes {chunk.start_byte}-{chunk.end_byte}, "
                         f"server sent Content-Range {response.headers.get('content-range')!r}",
                         status_code=206,
-                        url=info.url,
+                        url=target_url,
                         is_retryable=False,
                     )
 
+                # Positional writes are offloaded to a thread, because os.pwrite
+                # blocks and this loop runs on the event loop that every other
+                # worker's socket reads share. Offloading each network block
+                # directly would hand the pool a task per few kilobytes, so blocks
+                # are coalesced into write_buffer_bytes first: one thread hop per
+                # buffer instead of one per block, with per-worker memory still
+                # bounded by the buffer size.
+                buffer: list[bytes] = []
+                buffered = 0
+                buffer_start = offset
+                flush_threshold = max(4096, self._config.write_buffer_bytes)
+                first_byte_seen = False
+
                 async for data in response.aiter_raw():
+                    if not first_byte_seen:
+                        first_byte_seen = True
+                        # Time to first byte stands in for the path RTT. The chunk
+                        # sizer needs an RTT to form a bandwidth-delay product, and
+                        # measuring it here costs nothing and tracks the path the
+                        # request actually took -- which matters once the mirror
+                        # router may send successive chunks to different edges.
+                        if self._scheduler is not None:
+                            self._scheduler.collector.record_rtt(
+                                max(1e-6, time.monotonic() - request_started)
+                            )
                     if offset + len(data) > chunk.end_byte + 1:
                         raise HTTPError(
                             f"Chunk {chunk.index}: server sent more bytes than the requested range",
                             status_code=206,
-                            url=info.url,
+                            url=target_url,
                             is_retryable=False,
                         )
                     await self._throttle(len(data))
-                    writer.write_at(offset, data)
+                    # The digest is computed on the event loop: hashing is CPU-bound
+                    # but fast relative to the network, and keeping it here means the
+                    # bytes are hashed in arrival order without a second queue.
                     hasher.update(data)
+                    buffer.append(data)
+                    buffered += len(data)
                     offset += len(data)
+                    if buffered >= flush_threshold:
+                        await asyncio.to_thread(writer.write_at, buffer_start, b"".join(buffer))
+                        buffer.clear()
+                        buffer_start = offset
+                        buffered = 0
                     self._in_flight[chunk.index] = offset - chunk.start_byte
                     self._emit_progress()
+
+                if buffered:
+                    await asyncio.to_thread(writer.write_at, buffer_start, b"".join(buffer))
         except httpx.HTTPError as err:
-            raise _transport_error(err, info.url) from err
+            raise _transport_error(err, target_url) from err
 
         received = offset - chunk.start_byte
         if received != chunk.size:
             raise NetworkError(
                 f"Chunk {chunk.index} truncated: received {received} of {chunk.size} bytes",
-                url=info.url,
+                url=target_url,
             )
 
         digest = hasher.hexdigest()
@@ -601,6 +758,84 @@ class DownloadEngine:
             worker.cancel()
         await asyncio.gather(*workers, return_exceptions=True)
 
+    def _refill_queue(self, queue: "asyncio.Queue[ChunkState]", state: DownloadState) -> bool:
+        """
+        Plan the next batch of chunks and enqueue them.
+
+        Returns True when at least one chunk was added. Planning is delegated to
+        the scheduler, which is itself lock-guarded, so concurrent refills from
+        several workers hand out disjoint ranges rather than duplicating them.
+        """
+        scheduler = self._scheduler
+        if scheduler is None or not scheduler.adaptive_chunks:
+            return False
+        planned = scheduler.plan_more()
+        if not planned:
+            return False
+        for chunk in planned:
+            state.chunks.append(chunk)
+            queue.put_nowait(chunk)
+        logger.debug(
+            "download.planned",
+            chunks=len(planned),
+            first=planned[0].index,
+            sizes=sorted({c.size for c in planned}),
+        )
+        return True
+
+    async def _maybe_checkpoint(
+        self,
+        state: DownloadState,
+        state_path: Path,
+        writer: SparseFileWriter,
+        *,
+        force: bool = False,
+    ) -> None:
+        """
+        Checkpoint the resume state if the chunk or time threshold has been reached.
+
+        A checkpoint is an fsync of the output file followed by a full rewrite of
+        the state JSON. Both are blocking, and the state object grows with the chunk
+        count, so performing one after every chunk in every worker serializes the
+        whole transfer behind disk I/O on the event loop. Instead a checkpoint runs
+        at most once per ``checkpoint_interval_chunks`` completed chunks or once per
+        ``checkpoint_interval_seconds``, whichever comes first, and always on
+        completion or interruption.
+
+        The cost of the looser cadence is bounded and is paid only after a crash:
+        chunks completed since the last checkpoint are re-downloaded on resume. No
+        chunk is ever recorded as complete before its bytes are durable, so the
+        state file never over-claims.
+        """
+        self._chunks_since_checkpoint += 1
+        now = time.monotonic()
+        due = (
+            force
+            or self._chunks_since_checkpoint >= max(1, self._config.checkpoint_interval_chunks)
+            or (now - self._last_checkpoint_at) >= self._config.checkpoint_interval_seconds
+        )
+        if not due:
+            return
+
+        async with self._checkpoint_lock:
+            # Re-check under the lock: another worker may have just checkpointed,
+            # in which case this one has nothing left to record.
+            if not force and self._chunks_since_checkpoint == 0:
+                return
+            self._chunks_since_checkpoint = 0
+            self._last_checkpoint_at = time.monotonic()
+            await asyncio.to_thread(self._checkpoint_sync, state, state_path, writer)
+
+    def _checkpoint_sync(
+        self,
+        state: DownloadState,
+        state_path: Path,
+        writer: SparseFileWriter,
+    ) -> None:
+        """Blocking half of a checkpoint; always called through a worker thread."""
+        writer.sync()
+        self._state_manager.save(state, state_path)
+
     def _checkpoint_interrupted(
         self,
         state: DownloadState,
@@ -664,6 +899,9 @@ class DownloadEngine:
 
     def _reset_progress(self) -> None:
         self._started_at = time.monotonic()
+        self._chunks_since_checkpoint = 0
+        self._last_checkpoint_at = time.monotonic()
+        self._failed_mirrors = {}
         self._total_bytes = 0
         self._completed_bytes = 0
         self._resumed_bytes = 0

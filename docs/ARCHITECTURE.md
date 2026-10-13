@@ -28,12 +28,12 @@ graph TB
         CLI["CLI Interface<br/>(main.py / click)"]
     end
 
-    subgraph OrchestrationLayer["Orchestration & Stochastic Control"]
+    subgraph OrchestrationLayer["Orchestration & Control"]
         CONF["Config Layer<br/>(config.py)"]
         ENG["Download Engine<br/>(download_engine.py)"]
         SM["State Manager<br/>(state_manager.py)"]
-        AC["AdaChunk Optimizer<br/>(Lyapunov Control)"]
-        WS["Whittle Scheduler<br/>(RMAB Policy)"]
+        AC["BL-DCS Chunk Sizer<br/>(adaptive_chunker.py, library only)"]
+        WS["EXP3.S Mirror Router<br/>(mirror_bandit.py, library only)"]
     end
 
     subgraph ConcurrencyLayer["Concurrent Worker Pool"]
@@ -43,11 +43,9 @@ graph TB
     end
 
     subgraph ChunkLifecycle["Chunk Lifecycle & Recovery"]
-        CM["Chunk Manager<br/>(chunk_manager.py)"]
-        PE["Parity Engine<br/>(Gilbert-Elliott FEC)"]
-        HV["Hash Verifier & LtHash<br/>(hash_verifier.py)"]
-        ML["Merkle Localizer<br/>(Sub-Chunk Analysis)"]
-        RH["Retry Handler<br/>(retry_handler.py)"]
+        HV["Hash Verifier<br/>(hash_verifier.py)"]
+        MF["Merkle Tree & Signed Manifest<br/>(manifest.py)"]
+        FW["Sparse Writer<br/>(sparse_writer.py)"]
     end
 
     subgraph StorageLayer["Assembly & Direct Storage"]
@@ -64,15 +62,13 @@ graph TB
     CLI --> CONF
     CLI --> ENG
     ENG <--> SM
-    ENG --> AC
-    ENG --> WS
-    ENG --> CM
-    CM --> PE
+    ENG -. "not yet wired" .-> AC
+    ENG -. "not yet wired" .-> WS
     ENG --> W1 & W2 & WN
     W1 & W2 & WN --> HV
-    HV --> ML
-    HV --> RH
-    HV --> FA
+    W1 & W2 & WN --> FW
+    HV --> MF
+    FW --> FA
     FA --> TARGET
     SM -. "State Sync" .-> FA
 ```
@@ -172,7 +168,7 @@ graph TB
 
 ---
 
-### 3.4 Chunk Manager (`chunk_manager.py`)
+### 3.4 Chunk Planning (`download_engine.py::plan_chunks`)
 
 **Responsibility**: Compute chunk boundaries, track chunk lifecycle, provide chunk metadata.
 
@@ -226,7 +222,7 @@ stateDiagram-v2
 ```mermaid
 graph TD
     STREAM["HTTP Response Stream"]
-    STREAM --> HASH["hash_context.update(chunk_bytes)<br/>(Streaming SHA-256 + LtHash)"]
+    STREAM --> HASH["hash_context.update(chunk_bytes)<br/>(Streaming SHA-256)"]
     STREAM --> DISK["disk_write(chunk_bytes)<br/>(Positional pwrite / Temp File)"]
     
     HASH --> COMPUTE["computed_hash = hash_context.hexdigest()"]
@@ -306,7 +302,7 @@ This guarantees the state file is always either the old complete version or the 
 
 ---
 
-### 3.7 Retry Handler (`retry_handler.py`)
+### 3.7 Retry Policy (`download_engine.py`)
 
 **Responsibility**: Implement retry policy with exponential backoff and jitter.
 

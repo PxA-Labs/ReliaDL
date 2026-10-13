@@ -1,132 +1,141 @@
 # 1. ReliaDL Data Flow and System Architecture
 
-This document formally specifies the data flow, state transitions, and architectural interactions within the ReliaDL (formerly ReliaDL) reliable download system. ReliaDL leverages advanced cryptographic primitives, stochastic optimization, and forward error correction to ensure mathematically rigorous fault tolerance.
+This document specifies the data flow, state transitions, and architectural interactions within the ReliaDL download system (formerly ChunkGuard).
 
 ## 2. End-to-End Sequence Architecture
 
-The system incorporates several novel contributions:
-- **AdaChunk**: Adaptive chunk sizing using the Lyapunov drift-plus-penalty framework.
-- **Homomorphic Hash Aggregation**: $\mathcal{O}(1)$ whole-file verification via LtHash.
-- **Sub-chunk Merkle Localization**: Hierarchical Merkle trees for fine-grained corruption localization.
-- **Predictive Parity Injection**: Forward error correction via a Gilbert-Elliott channel model.
-- **Stochastic Optimal Worker Scheduling**: Restless multi-armed bandit (RMAB) Whittle index policy.
+The components involved, with their current integration status
+(see [ALGORITHMS.md](ALGORITHMS.md) for provenance and open issues):
+
+- **Transfer engine** *(wired)*: parallel HTTP range GETs with resume, per-chunk
+  SHA-256 verification and atomic state checkpointing.
+- **BL-DCS chunk sizing** *(library only)*: closed-loop chunk size from measured
+  bandwidth, RTT and loss.
+- **EXP3.S mirror routing** *(library only)*: adversarial-bandit selection among
+  replicas, with a circuit breaker and health monitor.
+- **Straggler detection and range bisection** *(library only)*: splits the unfetched
+  remainder of a lagging chunk.
+- **Merkle tree over chunk hashes** *(manifest and CLI audit only)*: inclusion proofs
+  in Ed25519-signed manifests.
+
+No forward error correction, homomorphic hashing, or restless-bandit scheduling is
+implemented. Earlier revisions of this document claimed all three.
 
 ```mermaid
 sequenceDiagram
     participant User
     participant DL as Download Engine
-    participant AC as AdaChunk Optimizer
-    participant CM as Chunk Manager
-    participant WS as Whittle Scheduler
-    participant W as Worker
-    participant PE as Parity Encoder
-    participant HH as Homomorphic Hasher
-    participant ML as Merkle Localizer
+    participant SM as State Manager
+    participant W as Worker Pool
+    participant HV as Hash Verifier
+    participant FW as Sparse Writer
 
-    User->>DL: Request(URL)
-    DL->>AC: OptimizeChunkSize(ChannelState)
-    AC-->>DL: OptimalSize(S*)
-    DL->>CM: InitializeChunks(FileLength, S*)
-    CM->>PE: GenerateParityAllocations()
-    PE-->>CM: ParityChunks(P)
-    DL->>WS: ScheduleWorkers()
-    WS->>W: Dispatch(OptimalAllocation)
-    W->>W: Download(Chunk)
-    W->>W: DualHash(SHA256, LtHash) + BuildMerkleTree()
-    W-->>CM: ChunkData, StreamHash, LtHash, MerkleRoot
-    CM->>HH: VerifyChunkHash(StreamHash)
-    alt Hash Valid
-        HH-->>CM: [PASS] Verification Complete
-        CM->>CM: Mark COMPLETED
-    else Hash Invalid
-        HH-->>CM: [FAIL] Verification Error
-        CM->>ML: LocalizeCorruption(MerkleTree)
-        ML-->>CM: SubChunkCorruptions(Indices)
-        CM->>CM: Mark LOCALIZING -> PARITY_RECOVERY
+    User->>DL: download(URL, output, expected_hash?)
+    DL->>DL: HEAD / probe: size, Accept-Ranges, ETag
+    DL->>SM: load or create resume state
+    SM-->>DL: completed chunk set
+    DL->>DL: plan_chunks(file_size, chunk_size_bytes)
+    loop for each pending chunk, bounded by max_parallel_workers
+        DL->>W: range GET [start, end]
+        W->>FW: pwrite(offset, bytes) as the stream arrives
+        W->>HV: incremental SHA-256 over 64 KB buffer
+        alt digest matches
+            HV-->>DL: chunk verified
+            DL->>SM: checkpoint chunk complete
+        else digest mismatch or transport error
+            HV-->>DL: verification failed
+            DL->>DL: discard whole chunk, retry with backoff + jitter
+        end
     end
-    CM->>HH: AggregateLtHash()
-    HH-->>DL: O(1) Verification Result
+    opt expected whole-file hash supplied
+        DL->>HV: re-read assembled file, O(N)
+        HV-->>User: verification result
+    end
 ```
+
 
 ## 3. State Machine Formalisms
 
 ### 3.1 Download State Machine
 
-The download lifecycle encompasses the initialization, stochastic scheduling, targeted localization, parity recovery, and homomorphic verification phases.
-
 ```mermaid
 stateDiagram-v2
     [*] --> INITIALIZED
-    INITIALIZED --> ALLOCATING : AdaChunk Optimizer
-    ALLOCATING --> DOWNLOADING : Whittle Scheduler
-    DOWNLOADING --> ASSEMBLING : All Chunks Downloaded
-    DOWNLOADING --> PARITY_RECOVERY : Chunk Failure Detected
-    PARITY_RECOVERY --> LOCALIZING : Sub-chunk Analysis
-    LOCALIZING --> DOWNLOADING : Targeted Retry
-    PARITY_RECOVERY --> ASSEMBLING : Forward Error Correction [PASS]
-    ASSEMBLING --> VERIFYING : Homomorphic Aggregation
-    VERIFYING --> COMPLETED : LtHash [PASS]
-    VERIFYING --> FAILED : LtHash [FAIL]
+    INITIALIZED --> PLANNING : probe size and range support
+    PLANNING --> DOWNLOADING : chunk plan built, resume state loaded
+    DOWNLOADING --> DOWNLOADING : chunk retried after failure
+    DOWNLOADING --> VERIFYING : all chunks complete
+    VERIFYING --> COMPLETED : whole-file hash matches, or none supplied
+    VERIFYING --> FAILED : whole-file hash mismatch
+    DOWNLOADING --> FAILED : retries exhausted
     COMPLETED --> [*]
     FAILED --> [*]
 ```
 
-### 3.2 Chunk State Machine
 
-Individual chunks follow a rigorous progression to ensure integrity at the sub-chunk granularity.
+### 3.2 Chunk State Machine
 
 ```mermaid
 stateDiagram-v2
     [*] --> PENDING
-    PENDING --> SCHEDULED : Whittle Index Assigned
-    SCHEDULED --> DOWNLOADING : Worker Dispatched
-    DOWNLOADING --> VERIFYING : Stream Complete
-    VERIFYING --> COMPLETED : Hash [PASS]
-    VERIFYING --> LOCALIZING : Hash [FAIL]
-    LOCALIZING --> PARITY_RECOVERY : Sub-chunk Corruptions Identified
-    PARITY_RECOVERY --> PARITY_RECOVERED : FEC Successful
-    PARITY_RECOVERED --> COMPLETED
-    PARITY_RECOVERY --> FAILED : FEC Exhausted
-    FAILED --> RETRYING : Backoff
-    RETRYING --> PENDING
+    PENDING --> DOWNLOADING : worker dispatched
+    DOWNLOADING --> VERIFYING : range stream complete
+    VERIFYING --> COMPLETED : SHA-256 matches
+    VERIFYING --> RETRYING : SHA-256 mismatch, whole chunk discarded
+    DOWNLOADING --> RETRYING : transport error or timeout
+    RETRYING --> PENDING : backoff with jitter
+    RETRYING --> FAILED : max_retries exhausted
     COMPLETED --> [*]
+    FAILED --> [*]
 ```
+
 
 ## 4. Data Path Formulations
 
-### 4.1 Chunk Download and Dual Hashing
+### 4.1 Chunk Download and Hashing
 
-During the download phase, Workers perform a concurrent dual-hash computation: a standard SHA-256 stream hash and a lattice-based homomorphic hash (LtHash). The optimal chunk size $S^*$ is determined continuously via AdaChunk, optimizing the trade-off between throughput and failure penalty:
+Each worker issues an HTTP range GET and streams the response, computing an incremental
+SHA-256 over a 64 KB buffer as bytes arrive. Bytes are written at their absolute offset
+via `os.pwrite` through `SparseFileWriter`, so no reassembly pass is needed.
 
-$$ S^* = \arg\max_{S} \mathbb{E}[U(S) - V \cdot Q(t)] $$
+The chunk size is currently a fixed configuration value. The BL-DCS controller
+(`algorithms/adaptive_chunker.py`) computes a size from measured bandwidth, RTT and
+loss, but is **not yet called by the engine** — see
+[ALGORITHMS.md](ALGORITHMS.md#1-bl-dcs-bandwidth-loss-closed-loop-dynamic-chunk-sizing).
 
-Simultaneously, the worker constructs a hierarchical Merkle tree over sub-chunk blocks $B$ to support subsequent error localization.
+### 4.2 Verification
 
-### 4.2 Assembly and Homomorphic Aggregation
+On arrival, each chunk's digest is compared against the expected value with
+`hmac.compare_digest`. A mismatch discards the whole chunk and re-fetches it.
 
-Traditional assembly mechanisms require $\mathcal{O}(N)$ re-reading of the assembled file to verify its integrity. ReliaDL implements an $\mathcal{O}(1)$ whole-file verification scheme utilizing homomorphic hashing. The final file hash $\mathcal{H}(F)$ is defined mathematically as the modulo sum of individual chunk hashes:
+Whole-file verification, when an expected digest is supplied, re-reads the completed
+file from disk — an O(N) I/O pass.
 
-$$ \mathcal{H}(F) = \sum_{i=1}^N \mathcal{H}(C_i) \pmod q $$
+> Earlier revisions of this section described a second hash layer (LtHash) giving O(1)
+> whole-file verification by summing chunk hashes, and a Merkle localization path that
+> avoided full chunk re-transmission. **Neither is implemented.**
 
-This guarantees verification without subsequent disk I/O penalties.
+## 5. Concurrency and Scheduling
 
-## 5. Concurrency and Optimal Scheduling
+Workers are drawn from a bounded pool (`max_parallel_workers`) and pull pending chunks
+from shared state; `httpx` connection limits are set to match the pool size.
 
-The Whittle Scheduler models dynamic worker-to-source allocation as a Restless Multi-Armed Bandit (RMAB) problem. By computing the Whittle index $W_i(s)$ for each source stream state $s$, the scheduler maximizes global throughput under strict concurrency constraints. 
+EXP3.S mirror routing (`algorithms/mirror_bandit.py`) and straggler detection with
+range bisection (`algorithms/work_stealer.py`) are implemented and unit-tested but are
+**not yet called by the engine**.
 
-$$ W_i(s) = \inf \{ \lambda : \text{Passive action is optimal in state } s \text{ under subsidy } \lambda \} $$
+## 6. Error Recovery
 
-## 6. Error Recovery and Localization
+Transient failures are retried with exponential backoff and jitter
+(`download_engine.py:643-652`). A chunk that fails verification is discarded and
+re-fetched in full. Completed chunks are checkpointed to the resume state file, so an
+interrupted transfer resumes at chunk granularity rather than restarting.
 
-### 6.1 Merkle Localization Path
+There is no forward error correction and no sub-chunk corruption localization on the
+download path.
 
-Upon verification failure, the Chunk Manager transitions to the `LOCALIZING` state. The Merkle Localizer executes an $\mathcal{O}(\log(S/B))$ traversal of the previously constructed Merkle tree. By comparing root and intermediate hashes, the system pinpoints corrupt segments at a sub-chunk granularity, entirely eliminating the need for full chunk re-transmission.
 
-### 6.2 Predictive Parity Recovery
-
-To mitigate latency in high-loss environments, ReliaDL proactively injects lightweight XOR-based parity chunks. The parity injection rate $\rho$ is governed by a Gilbert-Elliott channel model estimator, distinguishing between "Good" and "Bad" network states. The `PARITY_RECOVERY` state allows zero-RTT recovery from parity, proceeding to backoff-based `RETRYING` only upon parity exhaustion.
-
-## 6. Error Propagation Flow
+### 6.1 Error Propagation Flow
 
 ```
   Error occurs in Worker

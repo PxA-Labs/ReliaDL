@@ -493,6 +493,15 @@ def _engine_config(args: argparse.Namespace) -> DownloadConfig:
         download["chunk_size"] = args.chunk_size
     if getattr(args, "limit_rate", None) is not None:
         network["max_bandwidth"] = args.limit_rate
+    if getattr(args, "adaptive_chunks", False):
+        download["adaptive_chunk_sizing"] = True
+    if getattr(args, "adaptive_mirrors", False):
+        download["adaptive_mirror_routing"] = True
+    if getattr(args, "mirror", None):
+        # Naming mirrors is a request to use them, so it enables routing rather
+        # than silently recording URLs the engine would never consult.
+        download["mirrors"] = list(args.mirror)
+        download["adaptive_mirror_routing"] = True
     return get_download_config(
         config_path=getattr(args, "config", None),
         overrides={"download": download, "network": network},
@@ -646,8 +655,24 @@ def build_parser() -> argparse.ArgumentParser:
     p_dl = subparsers.add_parser("download", help="Execute parallel chunked file download")
     p_dl.add_argument("--url", required=True, help="Source URL")
     p_dl.add_argument("--output", "-o", required=True, help="Output file path")
-    p_dl.add_argument("--adachunk", action="store_true", help="Enable AdaChunk dynamic chunk optimization")
-    p_dl.add_argument("--whittle", action="store_true", help="Enable Whittle index mirror bandit scheduling")
+    # Scheduling policies. These select which algorithm the engine uses; the
+    # modules live in reliadl.algorithms. See docs/ALGORITHMS.md for status.
+    p_dl.add_argument(
+        "--adaptive-chunks",
+        action="store_true",
+        help="Size chunks from measured bandwidth, RTT and loss (BL-DCS) instead of a fixed size",
+    )
+    p_dl.add_argument(
+        "--adaptive-mirrors",
+        action="store_true",
+        help="Route range requests across mirrors with an EXP3.S adversarial bandit",
+    )
+    p_dl.add_argument(
+        "--mirror",
+        action="append",
+        metavar="URL",
+        help="Additional URL serving the same payload; repeatable. Implies --adaptive-mirrors",
+    )
     p_dl.add_argument("--expected-hash", "--sha256", dest="expected_hash", help="Expected SHA-256 of the whole file")
     _add_engine_arguments(p_dl)
 

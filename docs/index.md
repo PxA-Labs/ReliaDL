@@ -26,11 +26,11 @@ ReliaDL is a **fault-tolerant file download engine** designed to reliably transf
 
 | Feature | Description |
 | :--- | :--- |
-| 🔐 **Cryptographic Integrity** | Per-chunk SHA-256 validation, homomorphic LtHash aggregation, and 4 KB Merkle tree segment localization |
+| 🔐 **Cryptographic Integrity** | Streaming per-chunk SHA-256/384/512 validation with constant-time comparison; Merkle tree over chunk hashes in Ed25519-signed manifests |
 | 🌐 **Proxy Tunneling** | SOCKS5 (RFC 1928/1929) and HTTP CONNECT corporate proxy tunneling with destination-based TLS verification |
 | 🚦 **Traffic Pacing** | Token Bucket rate limiter with single-threaded reservation scheduling preventing thundering herd spikes |
 | 📊 **Observability** | Native Prometheus metrics exporter and structured JSON logging engine |
-| 🧠 **Stochastic Pacing** | Lyapunov-based dynamic chunk sizing (AdaChunk) and restless multi-armed bandit (Whittle index) scheduling |
+| 🧠 **Adaptive Scheduling** *(library only)* | Closed-loop chunk sizing from measured bandwidth and loss (BL-DCS), EXP3.S adversarial-bandit mirror routing, straggler detection with range bisection |
 | ☁️ **Cloud Adapters** | Plug-and-play streaming adapters for AWS S3, Google Cloud Storage, and Azure Blob Storage |
 
 ## Quick Install

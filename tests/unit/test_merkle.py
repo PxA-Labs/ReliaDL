@@ -43,24 +43,66 @@ class TestBinaryMerkleTree(unittest.TestCase):
         leaf2 = hashlib.sha256(b"\x00" + bytes.fromhex(h2)).digest()
         leaf3 = hashlib.sha256(b"\x00" + bytes.fromhex(h3)).digest()
 
+        def bind(tree_root: bytes, leaf_count: int) -> str:
+            # The published root commits to the leaf count (0x02 prefix); see
+            # manifest.hash_root and the second-preimage tests below.
+            return hashlib.sha256(
+                b"\x02" + leaf_count.to_bytes(8, "big") + tree_root
+            ).hexdigest()
+
         # 1-leaf tree
-        expected_root_1 = leaf0.hex()
-        self.assertEqual(compute_merkle_root([h0]), expected_root_1)
+        self.assertEqual(compute_merkle_root([h0]), bind(leaf0, 1))
 
         # 2-leaf tree
-        expected_root_2 = hashlib.sha256(b"\x01" + leaf0 + leaf1).hexdigest()
-        self.assertEqual(compute_merkle_root([h0, h1]), expected_root_2)
+        parent_0_1 = hashlib.sha256(b"\x01" + leaf0 + leaf1).digest()
+        self.assertEqual(compute_merkle_root([h0, h1]), bind(parent_0_1, 2))
 
         # 3-leaf tree (odd node duplication at level 0)
-        parent_0_1 = hashlib.sha256(b"\x01" + leaf0 + leaf1).digest()
         parent_2_2 = hashlib.sha256(b"\x01" + leaf2 + leaf2).digest()
-        expected_root_3 = hashlib.sha256(b"\x01" + parent_0_1 + parent_2_2).hexdigest()
-        self.assertEqual(compute_merkle_root([h0, h1, h2]), expected_root_3)
+        tree_root_3 = hashlib.sha256(b"\x01" + parent_0_1 + parent_2_2).digest()
+        self.assertEqual(compute_merkle_root([h0, h1, h2]), bind(tree_root_3, 3))
 
         # 4-leaf tree
         parent_2_3 = hashlib.sha256(b"\x01" + leaf2 + leaf3).digest()
-        expected_root_4 = hashlib.sha256(b"\x01" + parent_0_1 + parent_2_3).hexdigest()
-        self.assertEqual(compute_merkle_root([h0, h1, h2, h3]), expected_root_4)
+        tree_root_4 = hashlib.sha256(b"\x01" + parent_0_1 + parent_2_3).digest()
+        self.assertEqual(compute_merkle_root([h0, h1, h2, h3]), bind(tree_root_4, 4))
+
+    def test_second_preimage_duplicated_tail_rejected(self) -> None:
+        """
+        A duplicated tail must not reproduce the root (CVE-2012-2459 shape).
+
+        With a bare duplicating tree, [a, b, c] and [a, b, c, c] build identical
+        internal nodes and therefore collide. The root binds the leaf count, so
+        they must differ.
+        """
+        h = [ch * 64 for ch in "abc"]
+        self.assertNotEqual(compute_merkle_root(h), compute_merkle_root(h + [h[2]]))
+
+    def test_second_preimage_duplicated_pair_rejected(self) -> None:
+        """
+        [a, b] versus [a, b, a, b] must also differ.
+
+        This pair does not collide even without the leaf-count binding, because
+        the extra level changes the internal nodes. It is kept as a regression
+        guard: a future change to the balancing rule could make it collide, and
+        the leaf-count binding is what would still save it.
+        """
+        a, b = "a" * 64, "b" * 64
+        self.assertNotEqual(
+            compute_merkle_root([a, b]), compute_merkle_root([a, b, a, b])
+        )
+
+    def test_inclusion_proof_requires_matching_leaf_count(self) -> None:
+        """A proof verified under the wrong leaf count must fail."""
+        hashes = [ch * 64 for ch in "abcd"]
+        tree = BinaryMerkleTree(hashes)
+        proof = tree.get_proof(1)
+        self.assertTrue(
+            BinaryMerkleTree.verify_inclusion(hashes[1], proof, tree.root, leaf_count=4)
+        )
+        self.assertFalse(
+            BinaryMerkleTree.verify_inclusion(hashes[1], proof, tree.root, leaf_count=3)
+        )
 
     def test_empty_chunk_list_root(self) -> None:
         """Test that empty chunk list returns empty string root."""

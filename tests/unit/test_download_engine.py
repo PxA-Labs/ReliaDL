@@ -61,6 +61,12 @@ class _RangeServer(ThreadingHTTPServer):
         self._lock = threading.Lock()
         self._active = 0
         self.max_active = 0
+        # Rendezvous: when set, each ranged request blocks until this many are
+        # concurrently in flight. It turns "are chunks fetched in parallel?"
+        # into a question the server can answer exactly, instead of one inferred
+        # from how two timers happened to interleave.
+        self.expect_concurrent: Optional[int] = None
+        self.concurrency_reached = threading.Event()
 
     @property
     def url(self) -> str:
@@ -120,7 +126,14 @@ class _RangeHandler(BaseHTTPRequestHandler):
         with srv._lock:
             srv._active += 1
             srv.max_active = max(srv.max_active, srv._active)
+            if srv.expect_concurrent is not None and srv._active >= srv.expect_concurrent:
+                srv.concurrency_reached.set()
         try:
+            if srv.expect_concurrent is not None:
+                # A serial client never reaches the target and this times out,
+                # failing the assertion below deterministically rather than
+                # depending on wall-clock overlap.
+                srv.concurrency_reached.wait(timeout=10)
             if srv.gate_from is not None and start >= srv.gate_from:
                 srv.gate.wait(timeout=10)
             if srv.chunk_delay:
@@ -164,6 +177,7 @@ class DownloadEngineTestBase(unittest.IsolatedAsyncioTestCase):
         self.output = self.tmp / "out.bin"
 
     def tearDown(self) -> None:
+        self.server.concurrency_reached.set()
         self.server.gate.set()
         self.server.shutdown()
         self.server.server_close()
@@ -176,15 +190,30 @@ class DownloadEngineTestBase(unittest.IsolatedAsyncioTestCase):
 
 class TestDownload(DownloadEngineTestBase):
     async def test_parallel_download_matches_source(self) -> None:
-        self.server.chunk_delay = 0.05
-        result = await DownloadEngine(_config()).download(self.server.url, self.output)
+        # Previously this slowed the server and asserted that two requests
+        # happened to overlap in wall-clock time, which flaked on a loaded CI
+        # runner and was "fixed" by widening the delay. The server now blocks
+        # each ranged request until the expected number are in flight, so a
+        # serial client deadlocks until the timeout and fails the assertion
+        # every time instead of occasionally.
+        workers = 4
+        self.server.expect_concurrent = workers
+        result = await DownloadEngine(_config(max_parallel_workers=workers)).download(
+            self.server.url, self.output
+        )
 
         self.assertEqual(self.output.read_bytes(), self.payload)
         self.assertEqual(result.file_hash, self.digest)
         self.assertEqual(result.total_chunks, 6)
         self.assertEqual(result.total_bytes_downloaded, self.payload_size)
-        self.assertGreaterEqual(self.server.max_active, 2, "chunks were not fetched concurrently")
-        self.assertLessEqual(self.server.max_active, 4, "worker pool exceeded its bound")
+        self.assertEqual(
+            self.server.max_active,
+            workers,
+            "the worker pool did not reach its configured concurrency",
+        )
+        self.assertLessEqual(
+            self.server.max_active, workers, "worker pool exceeded its bound"
+        )
         self.assertFalse(self.state_path.exists())
         self.assertFalse(self.state_path.parent.exists())
         self.assertFalse(Path(str(self.output) + PART_SUFFIX).exists())

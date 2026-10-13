@@ -6,6 +6,7 @@ Validates syntax, schema, and required fields for Homebrew, WinGet, Scoop, and n
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import unittest
 from pathlib import Path
@@ -27,7 +28,10 @@ class TestPackagingManifests(unittest.TestCase):
         ]
         for path in formula_paths:
             self.assertTrue(path.exists(), f"Formula missing at {path}")
-            # Check Ruby syntax using ruby -c if ruby is installed
+            # `continue` here would report the test as passing while verifying
+            # nothing; skipTest records honestly that it did not run.
+            if shutil.which("ruby") is None:
+                self.skipTest("ruby is not installed; cannot syntax-check the Homebrew formula")
             res = subprocess.run(["ruby", "-c", str(path)], capture_output=True, text=True)
             self.assertEqual(res.returncode, 0, f"Ruby syntax error in {path}:\n{res.stderr}")
 

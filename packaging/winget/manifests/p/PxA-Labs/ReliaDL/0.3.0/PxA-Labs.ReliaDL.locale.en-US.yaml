@@ -17,7 +17,7 @@ Copyright: Copyright (c) 2026 PxA-Labs
 ShortDescription: Production-grade fault-tolerant parallel file downloader with per-chunk verification.
 Description: |
   ReliaDL is a high-throughput, fault-tolerant file download engine designed for resilient parallel downloads
-  over unreliable channels. Features include per-chunk SHA-256 validation, homomorphic LtHash aggregation,
+  over unreliable channels. Features include per-chunk SHA-256 validation, Merkle-tree signed manifests,
   Merkle segment integrity, SOCKS5/HTTP CONNECT proxy tunneling, and Prometheus telemetry.
 Moniker: reliadl
 Tags:

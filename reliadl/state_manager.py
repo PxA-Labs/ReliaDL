@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import threading
+import uuid
 from pathlib import Path
 from typing import Optional, Union
 
@@ -100,7 +102,13 @@ class StateManager:
         state.update_timestamp()
         json_data = state.to_json(indent=2)
 
-        tmp_path = path.parent / f"{path.name}.tmp.{os.getpid()}"
+        # The temp name must be unique per *writer*, not merely per process. Keying
+        # it on the PID alone is safe only while every caller runs on one thread of
+        # one event loop with no await inside this method; the moment a caller
+        # offloads save() to a thread pool -- which is the correct fix for the
+        # per-chunk fsync stall in the download engine -- two writers would share
+        # one temp path and clobber each other between write and os.replace.
+        tmp_path = path.parent / f"{path.name}.tmp.{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex[:8]}"
         bak_path = path.parent / f"{path.name}.bak"
 
         # 1. Write to temp file with fsync

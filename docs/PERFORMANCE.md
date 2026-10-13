@@ -36,7 +36,7 @@ Effective Throughput = min(
 | 16 | 5.0× | Diminishing returns — server/network saturation |
 | 32 | 5.2× | Usually no benefit; may trigger rate limiting |
 
-*Measured on a 1 Gbps connection downloading from a CDN. Actual results vary.
+*Illustrative model, **not measured**. Shows the expected shape of diminishing returns as the server or path saturates; the exact values are not from an experiment.
 
 ### 1.3 Chunk Size Impact
 
@@ -180,55 +180,28 @@ Lost bandwidth:
 | 1 chunk fails, retry succeeds | 8 MB | 0.008% |
 | 5 chunks fail, all retry succeed | 40 MB | 0.04% |
 | 1 chunk fails 3 times, succeeds on 3rd | 24 MB | 0.024% |
-| Traditional downloader at 95% | **95 GB** | **95%** |
+| Downloader with no resume support, failing at 95% | **95 GB** | **95%** |
 
 ---
 
 ## 5. Benchmark Results
 
-### 5.1 Test Environment
+> **No measured benchmark results are currently published.**
+>
+> A previous revision of this document contained throughput, chunk-size and
+> SHA-256 tables attributed to an AWS EC2 / S3 / CloudFront test environment.
+> **No script, harness, or code path in this repository could have produced those
+> numbers** — the download engine has no S3 code path, and no benchmark harness
+> exists. They have been removed rather than corrected, because there is no raw
+> data to correct them against.
+>
+> Every figure in §1-§4 above is an **analytical model or an order-of-magnitude
+> estimate**, not a measurement. Treat them as design guidance only. None of them
+> may be cited as experimental results.
+>
+> Measured results will appear here only when accompanied by a committed harness,
+> fixed seeds, repetition counts, and raw data under `benchmarks/`.
 
-```
-Server:     AWS S3 (us-east-1) via CloudFront CDN
-Client:     AWS EC2 c6i.xlarge (4 vCPU, 8 GB RAM)
-Network:    Up to 12.5 Gbps
-Disk:       gp3 SSD (3,000 IOPS, 125 MB/s baseline)
-File:       10 GB random data
-Python:     3.12.1
-```
-
-### 5.2 Throughput by Worker Count
-
-| Workers | Throughput (MB/s) | Time (s) | Speedup |
-|---|---|---|---|
-| 1 | 95 | 107.8 | 1.0× |
-| 2 | 178 | 57.5 | 1.87× |
-| 4 | 312 | 32.8 | 3.28× |
-| 8 | 445 | 23.0 | 4.68× |
-| 16 | 498 | 20.6 | 5.24× |
-
-### 5.3 Throughput by Chunk Size (4 Workers)
-
-| Chunk Size | Throughput (MB/s) | Chunks | Overhead (%) |
-|---|---|---|---|
-| 1 MB | 285 | 10,240 | 8.7% |
-| 4 MB | 305 | 2,560 | 2.2% |
-| 8 MB | 312 | 1,280 | 1.1% |
-| 16 MB | 315 | 640 | 0.6% |
-| 32 MB | 316 | 320 | 0.3% |
-
-### 5.4 SHA-256 Hashing Speed
-
-| Platform | Software (no SHA-NI) | Hardware (SHA-NI) |
-|---|---|---|
-| Intel i7-12700 | 430 MB/s | 2,100 MB/s |
-| AMD Ryzen 9 7950X | 480 MB/s | 2,500 MB/s |
-| Apple M3 | 520 MB/s | 3,200 MB/s |
-| AWS Graviton 3 | 450 MB/s | 2,800 MB/s |
-
-**Conclusion**: Hashing is never the bottleneck — even software-only SHA-256 (430 MB/s) exceeds most network connections.
-
----
 
 ## 6. Tuning Guide
 

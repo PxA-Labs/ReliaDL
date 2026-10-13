@@ -51,7 +51,7 @@ reliadl --verbose doctor
 
 ### 3.1 `download` — Execute Parallel Chunked File Transfer
 
-Initiates a high-speed parallel file download with optional adaptive chunk sizing (AdaChunk) and multi-armed bandit mirror scheduling (Whittle index).
+Initiates a parallel chunked file download, with optional adaptive chunk sizing and adaptive mirror routing.
 
 **Syntax**:
 ```bash
@@ -64,8 +64,8 @@ reliadl download --url URL --output OUTPUT_PATH [OPTIONS]
 |---|---|---|
 | `--url` | Yes | Source HTTP/HTTPS URL of target payload |
 | `--output`, `-o` | Yes | Target destination file path |
-| `--adachunk` | No | Enable dynamic AdaChunk Lyapunov chunk size optimization |
-| `--whittle` | No | Enable Whittle index multi-armed bandit mirror scheduling |
+| `--adaptive-chunks` | No | Size chunks from measured bandwidth, RTT and loss (BL-DCS) instead of a fixed size |
+| `--adaptive-mirrors` | No | Route range requests across mirrors with an EXP3.S adversarial bandit |
 | `--expected-hash`, `--sha256` | No | Expected SHA-256 of the whole file; the download fails if it does not match |
 | `--workers`, `-j` | No | Parallel connections, 1–32 (default: `download.max_parallel_workers`, 4) |
 | `--chunk-size` | No | Chunk size such as `8MB`, 1MB–256MB (default: `download.chunk_size`) |
@@ -83,8 +83,8 @@ Servers that do not support byte ranges are rejected for now; single-stream fall
 reliadl download \
   --url "https://cdn.example.com/datasets/models_v2.tar.gz" \
   --output "./downloads/models_v2.tar.gz" \
-  --adachunk \
-  --whittle
+  --adaptive-chunks \
+  --adaptive-mirrors
 ```
 
 ---

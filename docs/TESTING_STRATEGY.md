@@ -13,7 +13,7 @@
 | **Deterministic tests** | No flaky tests — mock randomness, time, network |
 | **Fast feedback** | Unit tests < 5s total, integration < 30s, E2E < 2 min |
 | **Fault injection** | Explicitly test failure scenarios, not just happy paths |
-| **Coverage targets** | 90%+ line coverage, 80%+ branch coverage |
+| **Coverage targets** | 90%+ line, 80%+ branch — **aspirational: not currently measured or enforced.** CI produces `coverage.xml` but applies no threshold |
 
 ---
 
@@ -39,7 +39,7 @@
 ### 3.1 Chunk Manager Tests
 
 ```python
-# tests/unit/test_chunk_manager.py
+# tests/unit/test_chunk_planner.py
 
 class TestChunkComputation:
     """Test chunk boundary calculations."""
@@ -142,7 +142,7 @@ class TestHashComputation:
 ### 3.3 Retry Handler Tests
 
 ```python
-# tests/unit/test_retry_handler.py
+# retry policy lives in download_engine.py
 
 class TestBackoffComputation:
     """Test exponential backoff delay calculation."""
@@ -470,19 +470,23 @@ pytest tests/integration/ -v
 pytest tests/e2e/ -v
 
 # Run with coverage
-pytest --cov=src --cov-report=html --cov-report=term
+pytest --cov=reliadl --cov-report=html --cov-report=term
 
 # Run specific test
-pytest tests/unit/test_chunk_manager.py::TestChunkComputation::test_exact_division -v
+pytest tests/unit/test_chunk_planner.py -v
 ```
 
 ### 7.2 Coverage Targets
 
+> **These are targets, not measurements.** No coverage threshold is configured
+> (`ci.yml` runs `pytest --cov` with no `--cov-fail-under`), and no measured
+> coverage figure is published anywhere. Do not cite these numbers as results.
+
+
 | Module | Line Coverage Target | Branch Coverage Target |
 |---|---|---|
-| `chunk_manager.py` | 95% | 90% |
+| `download_engine.py::plan_chunks` | 95% | 90% |
 | `hash_verifier.py` | 95% | 90% |
-| `retry_handler.py` | 95% | 90% |
 | `config.py` | 90% | 85% |
 | `models.py` | 90% | 85% |
 | `exceptions.py` | 80% | 70% |
@@ -514,7 +518,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: pip install -e ".[dev]"
-      - run: pytest --cov=src --cov-report=xml -v
+      - run: pytest --cov=reliadl --cov-report=xml -v
       - uses: codecov/codecov-action@v3
 ```
 
