@@ -37,6 +37,7 @@ from reliadl.exceptions import (
     RangeNotSupportedError,
     ReliaDLError,
     ServerError,
+    SubBlockCorruptedError,
     TimeoutError,
 )
 from reliadl.hash_verifier import (
@@ -56,6 +57,11 @@ from reliadl.models import (
     ProgressReport,
 )
 from reliadl.rate_limiter import TokenBucketRateLimiter
+from reliadl.manifest import (
+    DEFAULT_SUB_BLOCK_SIZE,
+    SubBlockStreamValidator,
+    load_manifest,
+)
 from reliadl.scheduling import DEFAULT_PLAN_BATCH, MirrorSelection, TransferScheduler
 from reliadl.sparse_writer import SparseFileWriter
 from reliadl.state_manager import StateManager
@@ -203,6 +209,14 @@ class DownloadEngine:
         self._scheduler: Optional[TransferScheduler] = None
         # chunk index -> mirrors that already failed this chunk, this session only
         self._failed_mirrors: dict[int, list[str]] = {}
+        # chunk index -> per-sub-block SHA-256 digests from the manifest, when one
+        # was supplied. Their presence is what makes localization possible: without
+        # them a chunk is verifiable only as a whole.
+        self._sub_blocks: dict[int, list[str]] = {}
+        self._sub_block_size = DEFAULT_SUB_BLOCK_SIZE
+        # chunk index -> bytes at the head of the chunk already verified good, so a
+        # retry re-fetches only the remainder instead of the whole range.
+        self._verified_prefix: dict[int, int] = {}
         self._reset_progress()
 
     @property
@@ -252,7 +266,15 @@ class DownloadEngine:
             # policies off it returns the same fixed partition plan_chunks()
             # produced, so the default path is unchanged.
             self._scheduler = self._build_scheduler(url, info.size)
-            state.chunks = self._scheduler.plan_initial()
+            manifest_chunks = self._load_manifest_chunks(info.size)
+            if manifest_chunks is not None:
+                # A manifest fixes the partition and supplies the digests, so it
+                # overrides both the fixed size and the adaptive planner: the
+                # boundaries must match the ones the hashes were computed over.
+                state.chunks = manifest_chunks
+                state.chunk_size = manifest_chunks[0].size if manifest_chunks else state.chunk_size
+            else:
+                state.chunks = self._scheduler.plan_initial()
             # A leftover .part from an abandoned session holds unrelated bytes.
             part_path.unlink(missing_ok=True)
             writer = SparseFileWriter(
@@ -353,6 +375,57 @@ class DownloadEngine:
             raise _transport_error(err, url) from err
 
     # ── Session orchestration ──────────────────────────────────────────────
+
+    def _load_manifest_chunks(self, file_size: int) -> Optional[list[ChunkState]]:
+        """
+        Load the configured manifest and adopt its partition and digests.
+
+        Returns None when no manifest is configured. A manifest is what makes
+        per-chunk and per-sub-block verification possible at all: without one the
+        engine can only check the whole file at the end, and a corrupt byte is
+        not attributable to any chunk.
+
+        The manifest's own chunk boundaries are adopted verbatim, because its
+        hashes were computed over exactly those ranges; re-partitioning the file
+        would make every digest meaningless.
+        """
+        path = getattr(self._config, "manifest_path", None)
+        if not path:
+            return None
+        manifest = load_manifest(path)
+        declared = manifest.artifact_metadata.file_size_bytes
+        if declared != file_size:
+            raise PreconditionFailedError(
+                f"Manifest describes a {declared}-byte file but the server reports "
+                f"{file_size}; the manifest does not match this payload",
+            )
+        # The manifest's own Merkle root is checked against the chunk list it
+        # carries, so a manifest whose chunk hashes were altered after signing is
+        # rejected before a single byte is fetched.
+        if manifest.chunking_topology.merkle_tree_root:
+            # Raises ManifestError on mismatch.
+            manifest.verify_merkle_root()
+
+        self._sub_blocks = {}
+        chunks: list[ChunkState] = []
+        for entry in manifest.chunks:
+            chunks.append(
+                ChunkState(
+                    index=entry.index,
+                    start_byte=entry.start_byte,
+                    end_byte=entry.end_byte,
+                    expected_hash=entry.sha256,
+                )
+            )
+            if entry.sub_blocks:
+                self._sub_blocks[entry.index] = list(entry.sub_blocks)
+        logger.info(
+            "manifest.loaded",
+            path=str(path),
+            chunks=len(chunks),
+            with_sub_blocks=len(self._sub_blocks),
+        )
+        return chunks
 
     def _build_scheduler(
         self,
@@ -499,6 +572,7 @@ class DownloadEngine:
             except ReliaDLError as err:
                 elapsed = time.monotonic() - started
                 self._in_flight.pop(chunk.index, None)
+                self._record_verified_prefix(chunk, err)
                 if scheduler is not None:
                     scheduler.record_failure(selection)
                     if selection is not None and selection.mirror_id:
@@ -529,11 +603,48 @@ class DownloadEngine:
                     duration_seconds=elapsed,
                 )
             chunk.mark_complete(digest)
+            self._verified_prefix.pop(chunk.index, None)
             self._failed_mirrors.pop(chunk.index, None)
             self._in_flight.pop(chunk.index, None)
             self._completed_bytes += chunk.size
             self._emit_progress(force=True)
             return
+
+    def _record_verified_prefix(self, chunk: ChunkState, err: ReliaDLError) -> None:
+        """
+        Remember how much of a failed chunk is known good, so the retry is localized.
+
+        Only a sub-block failure carries that information. The validator checks
+        each sub-block as it completes and aborts on the first bad one, so every
+        sub-block before it matched its manifest digest and its bytes are already
+        written. The retry therefore re-requests from the start of the bad block
+        rather than the start of the chunk, and the bytes wasted by one corruption
+        fall from the chunk size to the sub-block size.
+
+        Any other failure says nothing about which bytes are sound -- a truncated
+        or mis-ranged response could have written anything -- so the prefix is
+        cleared and the whole chunk is re-fetched.
+        """
+        if not isinstance(err, SubBlockCorruptedError):
+            self._verified_prefix.pop(chunk.index, None)
+            return
+        already = self._verified_prefix.get(chunk.index, 0)
+        good_blocks = already // self._sub_block_size + err.sub_block_index
+        prefix = min(good_blocks * self._sub_block_size, chunk.size)
+        if prefix <= already:
+            # No forward progress: re-fetch the whole chunk rather than loop on
+            # the same offset forever.
+            self._verified_prefix.pop(chunk.index, None)
+            return
+        self._verified_prefix[chunk.index] = prefix
+        logger.info(
+            "chunk.localized",
+            chunk=chunk.index,
+            bad_sub_block=err.sub_block_index,
+            verified_prefix=prefix,
+            refetch_bytes=chunk.size - prefix,
+            saved_bytes=prefix,
+        )
 
     async def _select_mirror(self, exclude: Sequence[str] = ()) -> Optional[MirrorSelection]:
         """
@@ -568,14 +679,21 @@ class DownloadEngine:
         # the session was opened against; everything else about the request,
         # including the If-Range validator, is unchanged.
         target_url = url or info.url
-        headers = {"Range": f"bytes={chunk.start_byte}-{chunk.end_byte}"}
+        # A retry after a localized failure re-requests only the unverified tail.
+        # Everything before resume_at was checked against its sub-block digest on
+        # the previous attempt and is already durable on disk, so re-fetching it
+        # would be pure waste -- which is the entire point of localization.
+        resume_at = self._verified_prefix.get(chunk.index, 0)
+        range_start = chunk.start_byte + resume_at
+        headers = {"Range": f"bytes={range_start}-{chunk.end_byte}"}
         if info.if_range:
             headers["If-Range"] = info.if_range
 
         hasher = StreamingHashVerifier(algorithm)
-        offset = chunk.start_byte
-        self._in_flight[chunk.index] = 0
+        offset = range_start
+        self._in_flight[chunk.index] = resume_at
         request_started = time.monotonic()
+        validator = self._build_validator(chunk, resume_at)
         try:
             async with client.stream("GET", target_url, headers=headers) as response:
                 if response.status_code == 200:
@@ -595,9 +713,9 @@ class DownloadEngine:
                     raise _http_error(response, target_url)
 
                 parsed = _parse_content_range(response.headers.get("content-range"))
-                if parsed is None or parsed[:2] != (chunk.start_byte, chunk.end_byte):
+                if parsed is None or parsed[:2] != (range_start, chunk.end_byte):
                     raise HTTPError(
-                        f"Chunk {chunk.index}: requested bytes {chunk.start_byte}-{chunk.end_byte}, "
+                        f"Chunk {chunk.index}: requested bytes {range_start}-{chunk.end_byte}, "
                         f"server sent Content-Range {response.headers.get('content-range')!r}",
                         status_code=206,
                         url=target_url,
@@ -641,6 +759,24 @@ class DownloadEngine:
                     # but fast relative to the network, and keeping it here means the
                     # bytes are hashed in arrival order without a second queue.
                     hasher.update(data)
+                    if validator is not None:
+                        try:
+                            # Raises SubBlockCorruptedError the moment a bad
+                            # sub-block completes, so the rest of the chunk is
+                            # never transferred.
+                            validator.update(data)
+                        except SubBlockCorruptedError:
+                            # The verified bytes ahead of the bad block are what
+                            # make the retry cheap, but they are only useful if
+                            # they are actually on disk. They may still be sitting
+                            # in the coalescing buffer, so flush before unwinding;
+                            # otherwise the retry would resume from an offset whose
+                            # bytes were never written and fail the re-digest.
+                            buffer.append(data)
+                            await asyncio.to_thread(
+                                writer.write_at, buffer_start, b"".join(buffer)
+                            )
+                            raise
                     buffer.append(data)
                     buffered += len(data)
                     offset += len(data)
@@ -664,7 +800,20 @@ class DownloadEngine:
                 url=target_url,
             )
 
-        digest = hasher.hexdigest()
+        if validator is not None:
+            # Verifies the trailing partial sub-block; every full one was already
+            # checked as it completed.
+            validator.finalize()
+
+        if resume_at:
+            # The streaming hasher only saw the tail, so the whole-chunk digest is
+            # recomputed from disk. This costs one chunk-sized read, and only on a
+            # retry that localization already made cheaper than a full re-fetch.
+            digest = await asyncio.to_thread(
+                self._digest_chunk_from_disk, writer, chunk, algorithm
+            )
+        else:
+            digest = hasher.hexdigest()
         if chunk.expected_hash and not constant_time_compare(digest, chunk.expected_hash):
             raise ChunkHashMismatchError(
                 f"Chunk {chunk.index} failed hash verification",
@@ -675,6 +824,40 @@ class DownloadEngine:
                 end_byte=chunk.end_byte,
             )
         return digest
+
+    def _build_validator(
+        self, chunk: ChunkState, resume_at: int
+    ) -> Optional[SubBlockStreamValidator]:
+        """
+        Build a sub-block validator for this chunk, if the manifest supplies one.
+
+        Returns None when no per-sub-block digests are known, in which case the
+        chunk is verifiable only as a whole and a failure costs the entire range.
+        """
+        digests = self._sub_blocks.get(chunk.index)
+        if not digests:
+            return None
+        skip = resume_at // self._sub_block_size
+        return SubBlockStreamValidator(
+            chunk_index=chunk.index,
+            expected_sub_blocks=digests[skip:],
+            sub_block_size=self._sub_block_size,
+        )
+
+    @staticmethod
+    def _digest_chunk_from_disk(
+        writer: SparseFileWriter, chunk: ChunkState, algorithm: str
+    ) -> str:
+        """Re-hash a chunk's full byte range from the part file."""
+        hasher = StreamingHashVerifier(algorithm)
+        remaining = chunk.size
+        offset = chunk.start_byte
+        while remaining > 0:
+            span = min(_REVALIDATE_READ_SIZE, remaining)
+            hasher.update(writer.read_at(offset, span))
+            offset += span
+            remaining -= span
+        return hasher.hexdigest()
 
     async def _finalize(
         self,
@@ -902,6 +1085,7 @@ class DownloadEngine:
         self._chunks_since_checkpoint = 0
         self._last_checkpoint_at = time.monotonic()
         self._failed_mirrors = {}
+        self._verified_prefix = {}
         self._total_bytes = 0
         self._completed_bytes = 0
         self._resumed_bytes = 0

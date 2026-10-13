@@ -187,29 +187,80 @@ guarantees.
 
 ---
 
-## 4. Merkle Tree Integrity and Signed Manifests
+## 4. Merkle Tree Integrity, Signed Manifests, and Sub-Block Localization
 
-**Status: Library (tree); CLI-only (audit command)** — `reliadl/manifest.py:817-970`
+**Status: Wired** (localization and manifest verification) — `reliadl/manifest.py`,
+`reliadl/download_engine.py`
+
+### Tree construction
 
 A binary Merkle tree over chunk hashes with domain separation — `SHA-256(0x00 || leaf)`
-and `SHA-256(0x01 || left || right)` — so a leaf hash can never be confused with an
-internal node. Inclusion proofs (`get_proof`, `verify_inclusion`) are implemented and
-compare roots in constant time. Manifests are canonicalized per RFC 8785 and signed
-with Ed25519.
+and `SHA-256(0x01 || left || right)`. Inclusion proofs (`get_proof`,
+`verify_inclusion`) compare roots in constant time. Manifests are canonicalized per
+RFC 8785 and signed with Ed25519.
 
-**Known weakness — must be fixed before the root is treated as a security boundary.**
-Odd node counts duplicate the last node (`manifest.py:890`) and the root does not commit
-to the leaf count. This is the CVE-2012-2459 shape: two different chunk lists can
-produce the same root. The root *is* signed in the manifest, so this is a live issue.
-Fix by binding the leaf count into the root, or by adopting the Certificate
-Transparency promotion rule.
+The published root additionally commits to the leaf count:
 
-`SubBlockStreamValidator` (`manifest.py:1001-1160`) aborts a stream at the first bad
-64 KB sub-block. It is implemented and tested but **has no production call site**: the
-download engine currently verifies whole chunks (`download_engine.py:511`) and discards
-an entire chunk on a single bad byte.
+```
+root = SHA-256(0x02 || uint64_be(leaf_count) || tree_root)
+```
 
----
+This closes a real second-preimage weakness. Odd nodes are paired with themselves,
+so `[a, b, c]` and `[a, b, c, c]` built identical internal nodes and therefore the
+same root — and the manifest *signs* that root. The collision was verified to exist
+before the fix and to be closed after it
+(`tests/unit/test_merkle.py::test_second_preimage_duplicated_tail_rejected`).
+Binding the count was chosen over the Certificate Transparency promotion rule
+because it leaves the tree shape, and therefore every existing audit path, intact.
+
+### Sub-block localization
+
+When a manifest supplies per-sub-block digests (default 64 KB), the engine streams
+each chunk through `SubBlockStreamValidator`. Each sub-block is checked as it
+completes, so a corrupt chunk is abandoned at the first bad block rather than after
+the whole range has arrived, and the verified prefix is kept. The retry re-requests
+only from the bad sub-block onward.
+
+**Measured.** A single flipped byte in sub-block 40 of a 64-sub-block, 4 MB chunk:
+
+| Verification | Bytes re-fetched |
+| :--- | ---: |
+| Whole-chunk SHA-256 only | 4096 KB |
+| Sub-block localization | 1536 KB |
+
+Pinned by `tests/unit/test_integrity_localization.py`.
+
+### The bound, stated honestly
+
+The saving depends on *where* the corruption falls, because the retry resumes from
+the bad sub-block rather than re-fetching only that block. Bytes re-fetched are
+`chunk_size - k * sub_block_size` for a corruption in sub-block `k`, so:
+
+- corruption in the last sub-block: saves nearly the whole chunk;
+- corruption in sub-block 0: saves **nothing** — the same cost as no localization
+  (`test_corruption_in_the_first_sub_block_saves_nothing`);
+- uniformly distributed corruption: saves about half the chunk on average.
+
+This is well short of the `1 - s/B` (99.95%) figure an earlier revision of the
+documentation claimed, and the gap is structural, not an implementation detail.
+
+**The open question this raises.** Reaching a position-independent cost of one
+sub-block per corruption requires *not* aborting: verify the whole chunk, collect
+every bad sub-block, then re-fetch exactly those ranges. That trades the bandwidth
+saved by aborting early against a smaller retry, and it also slows detection of a
+mirror that is corrupting data, since the stream runs to completion before the
+verdict. Which side wins depends on corruption rate, chunk size and sub-block size,
+and it is not obvious a priori. That tradeoff is unmeasured here and is the most
+interesting thing in this area.
+
+### Remaining gaps
+
+- Localization needs a manifest; without one the engine can verify only the whole
+  file at the end, and a corrupt byte is attributable to no chunk.
+- `get_proof` / `verify_inclusion` still have no production call site. The engine
+  checks sub-block digests directly rather than via inclusion proofs, which is
+  sufficient because the manifest is signed as a whole.
+
 
 ## 5. Supporting Mechanisms
 
@@ -236,7 +287,7 @@ with the prior art each would have to be built on and cited against.
 | LtHash homomorphic aggregation, O(1) whole-file verification | **Not implemented.** Whole-file verification is an O(N) disk re-read (`hash_verifier.py:179-186`) | Bellare and Micciancio (1997); Lewi et al. (2019) |
 | Predictive parity injection under a Gilbert-Elliott channel | **Not implemented.** No FEC of any kind exists | Gilbert (1960); Elliott (1963) |
 | Whittle index restless-bandit scheduling, with an indexability theorem | **Not implemented.** The router is EXP3.S, a different algorithm class — no subsidy, no indexability argument | Whittle (1988); Weber and Weiss (1990) |
-| Sub-chunk Merkle *localization* (binary search to corrupt segments) | **Not implemented.** The tree exists; the localization algorithm does not | Merkle (1987) |
+| Sub-chunk Merkle *localization* | **Now implemented** (section 4), though the saving is position-dependent, not the 99.95% originally claimed | Merkle (1987) |
 
 ---
 
