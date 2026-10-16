@@ -18,38 +18,13 @@ permissions:
   pull-requests: read
 
 jobs:
-  lint-and-typecheck:
-    name: Code Formatting, Linting & Type Safety
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-
-      - name: Install Linting & Typing Tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install ruff mypy pytest
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-
-      # Both of these previously ended in `|| true` and so could never fail a
-      # build. A CLI subcommand that called a method which does not exist shipped
-      # and stayed broken because of it. Configuration now lives in
-      # pyproject.toml so a local checkout enforces exactly what CI does.
-      - name: Lint (Ruff)
-        run: ruff check reliadl/ tests/ benchmarks/
-
-      - name: Type Checking (MyPy)
-        run: mypy
+  quality-gates:
+    name: Quality Gates
+    uses: ./.github/workflows/quality-gates.yml
 
   test-matrix:
     name: Test Matrix (Python ${{ matrix.python-version }} on ${{ matrix.os }})
-    needs: lint-and-typecheck
+    needs: quality-gates
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -86,24 +61,3 @@ jobs:
           name: coverage-report
           path: coverage.xml
           retention-days: 14
-
-  security-audit:
-    name: Dependency Security Audit
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
-
-      - name: Run Security Audit (pip-audit)
-        # Was `|| true`, which made the audit decorative. A finding now fails the
-        # build; a vulnerability that must be accepted belongs in an explicit
-        # --ignore-vuln with a reason, not in a swallowed exit code.
-        run: |
-          python -m pip install --upgrade pip
-          pip install pip-audit
-          if [ -f requirements.txt ]; then pip-audit -r requirements.txt; fi

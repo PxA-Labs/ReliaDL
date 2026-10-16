@@ -10,8 +10,13 @@ on:
         required: true
 
 jobs:
+  quality-gates:
+    name: Quality Gates
+    uses: ./.github/workflows/quality-gates.yml
+
   update-release-log:
     name: Generate Release Log & Checksums
+    needs: quality-gates
     runs-on: ubuntu-latest
     permissions:
       contents: write
