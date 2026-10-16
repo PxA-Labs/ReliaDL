@@ -17,17 +17,24 @@ import sys
 import time
 import urllib.request
 import urllib.error
+from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional, Sequence
 
 from reliadl.adapters.proxy_adapter import ProxyConfig, ProxyTunnel
 from reliadl.config import format_size, get_download_config
 from reliadl.download_engine import DownloadEngine
-from reliadl.exceptions import DownloadCancelledError, ReliaDLError
+from reliadl.exceptions import (
+    DownloadCancelledError,
+    ReliaDLError,
+    StateCorruptedError,
+    StateNotFoundError,
+    StorageError,
+)
 from reliadl.hash_verifier import StreamingHashVerifier, compute_file_hash, constant_time_compare
 from reliadl.logger import configure_logger, get_logger
 from reliadl.manifest import BinaryMerkleTree, compute_merkle_root, load_manifest
-from reliadl.models import DownloadConfig, DownloadResult, ProgressReport
+from reliadl.models import DownloadConfig, DownloadResult, DownloadState, ProgressReport
 from reliadl.state_manager import StateManager
 
 logger = get_logger("reliadl.cli")
@@ -207,20 +214,89 @@ def run_probe(args: argparse.Namespace) -> int:
 # 3. Inspect State Command Implementation
 # ─────────────────────────────────────────────────────────────────────────────
 
+
+def _load_state_for_inspection(state_path: Path) -> tuple[DownloadState, bool]:
+    """Load a state file and report whether recovery from its backup was needed."""
+    state_manager = StateManager()
+    backup_path = state_path.with_name(f"{state_path.name}.bak")
+    recovered_from_backup = False
+
+    if backup_path.is_file():
+        try:
+            # Probe without recovery so the diagnostic can distinguish a normal
+            # load from a primary-file recovery.
+            state_manager.load(state_path, auto_recover=False)
+        except Exception:
+            recovered_from_backup = True
+
+    state = state_manager.load(state_path, auto_recover=True)
+    return state, recovered_from_backup
+
+
+def _state_diagnostic_data(
+    state_path: Path,
+    state: DownloadState,
+    recovered_from_backup: bool,
+) -> dict[str, Any]:
+    """Build the stable, JSON-serializable report used by ``inspect-state``."""
+    statistics = state.statistics
+    completed_chunks = state.completed_chunks
+    failed_chunks = state.failed_chunks
+    bytes_total = (
+        statistics.bytes_total
+        if statistics is not None and statistics.bytes_total > 0
+        else state.file_size
+    )
+    bytes_downloaded = (
+        statistics.bytes_completed
+        if statistics is not None
+        else sum(chunk.size for chunk in completed_chunks)
+    )
+    failures = [
+        {"chunk_index": chunk.index, "message": chunk.error}
+        for chunk in state.chunks
+        if chunk.error
+    ]
+
+    return {
+        "state_file": str(state_path),
+        "version": state.version,
+        "download_id": state.download_id,
+        "url": state.url,
+        "target_path": state.target_path,
+        "output_path": state.output_path or state.target_path,
+        "status": state.status.value,
+        "file_size": state.file_size,
+        "bytes_total": bytes_total,
+        "bytes_downloaded": bytes_downloaded,
+        "total_chunks": state.total_chunks,
+        "completed_chunks": len(completed_chunks),
+        "pending_chunks": len(state.pending_chunks),
+        "failed_chunks": len(failed_chunks),
+        "retry_count": sum(chunk.retries for chunk in state.chunks),
+        "failures": failures,
+        "created_at": state.created_at.isoformat(),
+        "updated_at": state.updated_at.isoformat(),
+        "recovered_from_backup": recovered_from_backup,
+    }
+
+
 def run_inspect_state(args: argparse.Namespace) -> int:
     """
     Inspect, audit, and diagnose .state checkpoint files or .cgmanifest catalogs
     without initiating transfers.
     """
     target_path = Path(args.state_file)
-    if not target_path.exists():
+    is_manifest = target_path.suffix.lower() == ".cgmanifest" or "manifest" in target_path.name.lower()
+    backup_path = target_path.with_name(f"{target_path.name}.bak")
+    if not target_path.exists() and (is_manifest or not backup_path.is_file()):
         print(f"[ERROR] Specified state file or manifest does not exist: {target_path}")
         return 1
 
     as_json = getattr(args, "json", False)
 
     # Inspect Manifest (.cgmanifest / .json)
-    if target_path.suffix.lower() == ".cgmanifest" or "manifest" in target_path.name.lower():
+    if is_manifest:
         try:
             manifest = load_manifest(target_path)
             if as_json:
@@ -243,31 +319,19 @@ def run_inspect_state(args: argparse.Namespace) -> int:
             print("======================================================================\n")
             return 0
         except Exception as e:
-            print(f"[WARN] Failed to parse as ChunkGuard manifest: {e}. Falling back to state inspect.")
+            print(f"[ERROR] Failed to parse manifest {target_path}: {e}")
+            return 1
 
     # Inspect Download State (.state)
     try:
-        # StateManager has no snapshot(); it loads a DownloadState. The previous
-        # code called a method that does not exist, so this command failed every
-        # time it was run -- the broad except below reported it as a parse error.
-        state = StateManager().load(target_path)
-        completed = state.completed_chunks
-
-        data: dict[str, Any] = {
-            "target_path": state.target_path,
-            "file_size": state.file_size,
-            "status": state.status.value,
-            "total_chunks": state.total_chunks,
-            "completed_chunks": len(completed),
-            "pending_chunks": len(state.pending_chunks),
-            "failed_chunks": len(state.failed_chunks),
-            "bytes_downloaded": sum(c.size for c in completed),
-            "url": state.url,
-            # str() rather than the datetime itself: this dict is also emitted
-            # as JSON, and datetime is not serializable.
-            "created_at": str(state.created_at),
-            "updated_at": str(state.updated_at),
-        }
+        if as_json:
+            # Some library logging configurations write to stdout by default;
+            # keep machine-readable output limited to the JSON report.
+            with redirect_stdout(sys.stderr):
+                state, recovered_from_backup = _load_state_for_inspection(target_path)
+        else:
+            state, recovered_from_backup = _load_state_for_inspection(target_path)
+        data = _state_diagnostic_data(target_path, state, recovered_from_backup)
 
         if as_json:
             print(json.dumps(data, indent=2))
@@ -275,26 +339,47 @@ def run_inspect_state(args: argparse.Namespace) -> int:
 
         file_size = int(data["file_size"])
         bytes_dl = int(data["bytes_downloaded"])
-        pct = (bytes_dl / file_size * 100.0) if file_size > 0 else 0.0
+        bytes_total = int(data["bytes_total"])
+        pct = (bytes_dl / bytes_total * 100.0) if bytes_total > 0 else 0.0
 
         print("======================================================================")
         print(" RELIADL STATE CHECKPOINT DIAGNOSTIC AUDIT")
         print("======================================================================")
         print(f"State Path       : {target_path}")
         print(f"Target Artifact  : {data['target_path']}")
+        print(f"Source URL       : {data['url']}")
         print(f"Status           : {data['status']}")
         print(f"Artifact Size    : {file_size:,} bytes ({format_size(file_size)})")
-        print(f"Bytes Complete   : {bytes_dl:,} bytes ({pct:.1f}%)")
+        print(f"Bytes Complete   : {bytes_dl:,} / {bytes_total:,} bytes ({pct:.1f}%)")
         print(f"Total Chunks     : {data['total_chunks']}")
         print(f"Completed Chunks : {data['completed_chunks']} / {data['total_chunks']}")
         print(f"Pending Chunks   : {data['pending_chunks']}")
         print(f"Failed Chunks    : {data['failed_chunks']}")
-        print(f"Source URL       : {data['url']}")
+        print(f"Retries          : {data['retry_count']}")
+        print(f"Created At       : {data['created_at']}")
         print(f"Last Updated     : {data['updated_at']}")
+        if data["recovered_from_backup"]:
+            print("Recovery         : Recovered from backup state file")
+        if data["failures"]:
+            print("Failure Details  :")
+            for failure in data["failures"]:
+                print(f"  Chunk {failure['chunk_index']}: {failure['message']}")
         print("======================================================================\n")
         return 0
+    except StateNotFoundError:
+        print(f"[ERROR] State file not found or no usable backup exists: {target_path}")
+        return 1
+    except StateCorruptedError as e:
+        print(f"[ERROR] State file is corrupted or incompatible: {target_path}: {e}")
+        return 1
+    except StorageError as e:
+        print(f"[ERROR] Unable to read state file {target_path}: {e}")
+        return 1
+    except (KeyError, TypeError, ValueError) as e:
+        print(f"[ERROR] State file is incompatible with this ReliaDL version: {target_path}: {e}")
+        return 1
     except Exception as e:
-        print(f"[ERROR] Failed to inspect state file: {e}")
+        print(f"[ERROR] Failed to inspect state file {target_path}: {e}")
         return 1
 
 
