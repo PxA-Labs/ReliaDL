@@ -2,8 +2,11 @@
 Unit tests for ReliaDL Command Line Interface (CLI) subcommands.
 """
 
+import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -20,6 +23,14 @@ from reliadl.cli import (
 )
 from reliadl.hash_verifier import compute_file_hash
 from reliadl.manifest import ChunkManifest, ManifestChunk, ArtifactMetadata, ChunkingTopology
+from reliadl.models import (
+    ChunkState,
+    ChunkStatus,
+    DownloadState,
+    DownloadStatistics,
+    DownloadStatus,
+)
+from reliadl.state_manager import StateManager
 
 
 class TestCLISubcommands(unittest.TestCase):
@@ -72,13 +83,6 @@ class TestCLISubcommands(unittest.TestCase):
         on the reported contents, not merely on the exit code, because the old
         code "succeeded" at printing an error.
         """
-        import json
-        from io import StringIO
-        from contextlib import redirect_stdout
-
-        from reliadl.models import ChunkState, DownloadState, DownloadStatus
-        from reliadl.state_manager import StateManager
-
         with tempfile.TemporaryDirectory() as tmpdir:
             target = Path(tmpdir) / "payload.bin"
             chunks = [
@@ -133,6 +137,95 @@ class TestCLISubcommands(unittest.TestCase):
             parser = build_parser()
             args = parser.parse_args(["inspect-state", "--state-file", str(missing)])
             self.assertEqual(run_inspect_state(args), 1)
+
+    def test_inspect_state_reports_retries_and_failures(self) -> None:
+        """The report includes persisted counters and chunk failure details."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "payload.bin"
+            chunks = [
+                ChunkState(index=0, start_byte=0, end_byte=499, status=ChunkStatus.COMPLETE),
+                ChunkState(
+                    index=1,
+                    start_byte=500,
+                    end_byte=999,
+                    status=ChunkStatus.FAILED,
+                    retries=2,
+                    error="connection reset",
+                ),
+            ]
+            state = DownloadState(
+                download_id="retry-test",
+                url="https://example.com/payload.bin",
+                target_path=str(target),
+                file_size=1000,
+                status=DownloadStatus.FAILED,
+                chunks=chunks,
+                statistics=DownloadStatistics(bytes_completed=500, bytes_total=1000),
+            )
+            state_path = Path(tmpdir) / "payload.bin.state"
+            StateManager().save(state, state_path)
+
+            args = build_parser().parse_args(
+                ["inspect-state", "--state-file", str(state_path), "--json"]
+            )
+            buffer = StringIO()
+            with redirect_stdout(buffer):
+                self.assertEqual(run_inspect_state(args), 0)
+
+            report = json.loads(buffer.getvalue())
+            self.assertEqual(report["bytes_downloaded"], 500)
+            self.assertEqual(report["bytes_total"], 1000)
+            self.assertEqual(report["retry_count"], 2)
+            self.assertEqual(report["failed_chunks"], 1)
+            self.assertEqual(report["failures"], [{"chunk_index": 1, "message": "connection reset"}])
+            self.assertFalse(report["recovered_from_backup"])
+
+    def test_inspect_state_recovers_from_backup(self) -> None:
+        """A corrupted primary state is loaded from its valid backup and reported."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "payload.bin"
+            state = DownloadState(
+                download_id="backup-test",
+                url="https://example.com/payload.bin",
+                target_path=str(target),
+                file_size=512,
+                status=DownloadStatus.DOWNLOADING,
+                chunks=[ChunkState(index=0, start_byte=0, end_byte=511)],
+            )
+            state_path = Path(tmpdir) / "payload.bin.state"
+            manager = StateManager()
+            manager.save(state, state_path)
+            state.status = DownloadStatus.FAILED
+            manager.save(state, state_path)
+            state_path.write_text("{not valid json", encoding="utf-8")
+
+            args = build_parser().parse_args(
+                ["inspect-state", "--state-file", str(state_path), "--json"]
+            )
+            buffer = StringIO()
+            with redirect_stdout(buffer):
+                self.assertEqual(run_inspect_state(args), 0)
+
+            report = json.loads(buffer.getvalue())
+            self.assertEqual(report["status"], "DOWNLOADING")
+            self.assertTrue(report["recovered_from_backup"])
+
+    def test_inspect_state_reports_corruption_without_traceback(self) -> None:
+        """Corrupted state input returns a clean, actionable non-zero result."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_path = Path(tmpdir) / "corrupted.state"
+            state_path.write_text("not valid state", encoding="utf-8")
+            args = build_parser().parse_args(
+                ["inspect-state", "--state-file", str(state_path)]
+            )
+
+            buffer = StringIO()
+            with redirect_stdout(buffer):
+                self.assertEqual(run_inspect_state(args), 1)
+
+            output = buffer.getvalue()
+            self.assertIn("corrupted", output.lower())
+            self.assertNotIn("Traceback", output)
 
     def test_inspect_state_manifest(self) -> None:
         """Test run_inspect_state on ChunkGuard manifest."""

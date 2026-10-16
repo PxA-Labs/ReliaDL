@@ -225,7 +225,9 @@ reliadl probe \
 
 ### 4.4 `inspect-state` — Checkpoint & Manifest Diagnostic
 
-Audits and parses `.state` binary checkpoint files or `.cgmanifest` catalogs without downloading or mutating data.
+Audits and parses persisted `.state` checkpoint files or `.cgmanifest` catalogs without
+initiating a download. If a primary state file is corrupt, the command uses the
+existing `.state.bak` recovery path and reports that recovery in the diagnostic.
 
 **Syntax**:
 ```bash
@@ -243,6 +245,13 @@ reliadl inspect-state --state-file FILE_PATH [--json]
 ```bash
 reliadl inspect-state --state-file "./downloads/.reliadl/model.bin.state" --json
 ```
+
+For a state file, the report includes the download URL and target, lifecycle status,
+file and byte counts, total/completed/pending/failed chunk counts, retry totals,
+chunk failure messages, timestamps, and whether the backup file was used. `--json`
+prints only the machine-readable report on standard output. Missing, corrupt, or
+incompatible state files return exit code `1` with an actionable error instead of a
+traceback.
 
 ---
 
