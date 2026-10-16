@@ -16,6 +16,7 @@ import unittest
 import urllib.error
 import urllib.request
 from typing import List
+from unittest.mock import patch
 
 from reliadl.exceptions import ConfigurationError
 from reliadl.telemetry.metrics import (
@@ -493,23 +494,71 @@ class TestMetricsServer(unittest.TestCase):
         self.assertTrue(self.server.is_running)
 
     def test_concurrent_scrapes_are_served(self) -> None:
-        """A scraper plus a human with a browser is the normal case."""
-        results: List[int] = []
+        """A burst larger than the default listen backlog serves every client."""
+        results: List[tuple[int, bytes]] = []
+        errors: List[BaseException] = []
         guard = threading.Lock()
 
         def scrape() -> None:
-            with urllib.request.urlopen(self.server.url, timeout=10) as response:
-                code = response.status
-                response.read()
-            with guard:
-                results.append(code)
+            try:
+                with urllib.request.urlopen(self.server.url, timeout=10) as response:
+                    result = (response.status, response.read())
+                with guard:
+                    results.append(result)
+            except BaseException as error:  # noqa: BLE001 - surfaced below
+                with guard:
+                    errors.append(error)
 
         threads = [threading.Thread(target=scrape) for _ in range(8)]
         for thread in threads:
             thread.start()
         for thread in threads:
             thread.join(timeout=20)
-        self.assertEqual(results, [200] * 8)
+        self.assertTrue(all(not thread.is_alive() for thread in threads))
+        self.assertEqual(errors, [])
+        self.assertEqual([code for code, _ in results], [200] * 8)
+        self.assertTrue(
+            all(b"# HELP chunkguard_bytes_downloaded_total" in body for _, body in results)
+        )
+
+    def test_shutdown_completes_with_scrape_in_flight(self) -> None:
+        """Stopping the server does not strand an already accepted scrape."""
+        render_started = threading.Event()
+        allow_render = threading.Event()
+        responses: List[int] = []
+        errors: List[BaseException] = []
+        original_render = self.metrics.registry.render
+
+        def slow_render() -> str:
+            render_started.set()
+            if not allow_render.wait(timeout=5):
+                raise RuntimeError("test render was not released")
+            return original_render()
+
+        def scrape() -> None:
+            try:
+                with urllib.request.urlopen(self.server.url, timeout=10) as response:
+                    response.read()
+                    responses.append(response.status)
+            except BaseException as error:  # noqa: BLE001 - surfaced below
+                errors.append(error)
+
+        with patch.object(self.metrics.registry, "render", side_effect=slow_render):
+            scrape_thread = threading.Thread(target=scrape)
+            scrape_thread.start()
+            self.assertTrue(render_started.wait(timeout=5))
+
+            stop_thread = threading.Thread(target=self.server.stop)
+            stop_thread.start()
+            allow_render.set()
+
+            stop_thread.join(timeout=10)
+            scrape_thread.join(timeout=10)
+
+        self.assertFalse(stop_thread.is_alive())
+        self.assertFalse(scrape_thread.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(responses, [200])
 
     def test_context_manager_stops_the_server(self) -> None:
         registry = MetricsRegistry()

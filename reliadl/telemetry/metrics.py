@@ -758,6 +758,10 @@ class _MetricsHTTPServer(ThreadingHTTPServer):
     """
 
     allow_reuse_address = os.name != "nt"
+    # ``socketserver.TCPServer`` defaults this to 5. A Prometheus scrape burst
+    # can fill that queue before ThreadingMixIn has accepted the connections,
+    # causing clients to see connection resets rather than a 200 response.
+    request_queue_size = 64
 
 
 class MetricsServer:
