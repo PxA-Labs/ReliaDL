@@ -72,3 +72,5 @@
 
 | **BL-DCS** | Bandwidth-Loss Dynamic Chunk Sizing. A closed-loop algorithm that adjusts chunk sizes based on measured network throughput and packet loss rate. |
 
+| **EXP3.S** | A variant of the EXP3 adversarial multi-armed bandit algorithm with shifting guarantees. Used for mirror selection under non-stationary network conditions. |
+
