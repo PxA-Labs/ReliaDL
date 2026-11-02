@@ -13,7 +13,7 @@ ReliaDL is a fault-tolerant file download tool that splits large files into smal
 Traditional download tools download files as a single stream. If the download is interrupted at 95%, you restart from 0%. If the file is silently corrupted, you won't know until you try to use it. ReliaDL solves both problems with chunked downloads and cryptographic verification.
 
 ### What programming language is ReliaDL written in?
-Python 3.10+, using asyncio for concurrent downloads and the standard library's `hashlib` for SHA-256 hashing.
+Python 3.10 and above, leveraging asyncio for concurrent downloads and the standard library's `hashlib` for SHA-256 hashing.
 
 ### Is ReliaDL free?
 Yes. ReliaDL is released under the Apache License 2.0 — free for personal and commercial use with built-in patent protection.
