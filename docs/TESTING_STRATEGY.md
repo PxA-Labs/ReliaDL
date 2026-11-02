@@ -1,4 +1,4 @@
-# Testing Strategy — ReliaDL
+# testing strategy and quality assurance methodology — ReliaDL
 
 > **Audience**: QA Engineers, Developers
 > **Reading time**: ~10 minutes
