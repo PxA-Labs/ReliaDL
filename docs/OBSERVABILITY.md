@@ -1,4 +1,4 @@
-# Observability, Metrics & Monitoring — ChunkGuard
+# observability and monitoring, Metrics & Monitoring — ChunkGuard
 
 > **Audience**: SREs, DevOps, Platform Engineers, System Operators
 > **Status**: Production Standard
@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-ChunkGuard is designed with cloud-native, enterprise-grade observability across three telemetry pillars:
+ChunkGuard is designed with cloud-native, enterprise-grade observability and monitoring across three telemetry pillars:
 1. **Metrics**: Real-time Prometheus metrics for scrapers and Prometheus Pushgateway.
 2. **Distributed Tracing**: OpenTelemetry (OTel) instrumentation for end-to-end distributed tracing across microservices.
 3. **Structured Logging**: JSON-formatted log streams compatible with Datadog, Elasticsearch/Logstash/Kibana (ELK), Splunk, and AWS CloudWatch.
