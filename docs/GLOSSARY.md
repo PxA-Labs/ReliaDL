@@ -68,3 +68,5 @@
 
 | **EWMA** | Exponentially Weighted Moving Average. A statistical technique used in the metrics collector to estimate smoothed network throughput and round-trip time. |
 
+| **Circuit Breaker** | A fault-tolerance design pattern that prevents repeated requests to a failing service. Opens after a threshold of consecutive failures and resets after a cool-down period. |
+
