@@ -1,6 +1,6 @@
-# 1. ReliaDL Data Flow and System Architecture
+# 1. ReliaDL data flow and state transitions and System Architecture
 
-This document specifies the data flow, state transitions, and architectural interactions within the ReliaDL download system (formerly ChunkGuard).
+This document specifies the data flow and state transitions, state transitions, and architectural interactions within the ReliaDL download system (formerly ChunkGuard).
 
 ## 2. End-to-End Sequence Architecture
 
@@ -178,7 +178,7 @@ download path.
 
 ---
 
-## 7. Direct Sparse Write Data Flow
+## 7. Direct Sparse Write data flow and state transitions
 
 ```
 Download Initialized (--direct-write)
