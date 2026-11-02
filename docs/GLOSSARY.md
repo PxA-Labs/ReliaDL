@@ -80,3 +80,5 @@
 
 | **TLS** | Transport Layer Security. A cryptographic protocol providing end-to-end encryption for network communications. ReliaDL enforces TLS 1.2 or higher for all HTTPS transfers. |
 
+| **fsync** | A system call that flushes file data and metadata from kernel buffers to persistent storage. Used by the state manager to guarantee crash-safe checkpoint persistence. |
+
