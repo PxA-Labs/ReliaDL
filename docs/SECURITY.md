@@ -1,4 +1,6 @@
-# Security Considerations — ReliaDL
+# Security Policy
+
+This document describes ReliaDL's security posture and coordinated disclosure process. Considerations — ReliaDL
 
 > **Audience**: Security Engineers, Auditors, DevOps
 > **Reading time**: ~10 minutes
@@ -240,4 +242,7 @@ Mitigation:
 | **NIST SP 800-131A** | Cryptographic algorithm recommendations | SHA-256 is approved through 2030+ |
 | **SOC 2 Type II** | Security controls for data integrity | Per-chunk + whole-file verification; audit logging |
 | **GDPR** | Data protection | No PII stored; downloads are user-initiated; logs contain no PII |
+
+
+<!-- Last reviewed: 2026-11-02 -->
 
