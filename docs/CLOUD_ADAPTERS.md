@@ -1,6 +1,6 @@
-# Cloud Storage & Protocol Adapters — ChunkGuard
+# cloud storage Storage & Protocol Adapters — ChunkGuard
 
-> **Audience**: Cloud Architects, Systems Engineers, DevOps
+> **Audience**: cloud storage Architects, Systems Engineers, DevOps
 > **Status**: Architecture & Protocol Specification
 > **Reading time**: ~15 minutes
 
@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-ChunkGuard is designed as a protocol-agnostic, fault-tolerant data transfer engine. While standard HTTP/1.1 and HTTP/2 Range requests serve as the default transport layer, ChunkGuard provides native protocol adapters for **Cloud Object Stores (AWS S3, Google Cloud Storage, Azure Blob Storage)**, **Enterprise Proxies (HTTP CONNECT & SOCKS5)**, and **Next-Generation HTTP/3 (QUIC)**.
+ChunkGuard is designed as a protocol-agnostic, fault-tolerant data transfer engine. While standard HTTP/1.1 and HTTP/2 Range requests serve as the default transport layer, ChunkGuard provides native protocol adapters for **cloud storage Object Stores (AWS S3, Google cloud storage Storage, Azure Blob Storage)**, **Enterprise Proxies (HTTP CONNECT & SOCKS5)**, and **Next-Generation HTTP/3 (QUIC)**.
 
 ```
                          ┌─────────────────────────────┐
@@ -99,7 +99,7 @@ ChunkGuard automatically detects and leverages **S3 Transfer Acceleration** (`bu
 
 ---
 
-## 4. Google Cloud Storage (GCS) Adapter
+## 4. Google cloud storage Storage (GCS) Adapter
 
 ### 4.1 Supported URI Formats
 * `gs://bucket-name/path/to/file.img`
