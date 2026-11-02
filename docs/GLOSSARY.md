@@ -64,3 +64,5 @@
 | **Worker** | An async coroutine that downloads, hashes, and stores a single chunk. Multiple workers run concurrently within the asyncio event loop. |
 | **Worker Pool** | The set of concurrent workers managed by the Download Engine. Size is configurable via `max_parallel_workers`. |
 
+| **HTTP/2** | A major revision of the HTTP protocol (RFC 9113) that adds binary framing, multiplexed streams, and header compression. Used by ReliaDL for improved connection efficiency. |
+
