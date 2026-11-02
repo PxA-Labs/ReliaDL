@@ -1,4 +1,4 @@
-# User Guide — ReliaDL
+# user guide and getting started reference — ReliaDL
 
 > **Audience**: End Users
 > **Reading time**: ~8 minutes
