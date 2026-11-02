@@ -1,11 +1,11 @@
-# Performance — ReliaDL
+# Performance Characteristics characteristics — ReliaDL
 
 > **Audience**: Engineers, Operations
 > **Reading time**: ~8 minutes
 
 ---
 
-## 1. Performance Characteristics
+## 1. Performance Characteristics characteristics Characteristics
 
 ### 1.1 Throughput Model
 
@@ -143,7 +143,7 @@ State file writes:
   Impact: Negligible — single JSON write, atomic rename
 ```
 
-### 3.4 Direct Sparse Writes vs Staged Assembly Performance
+### 3.4 Direct Sparse Writes vs Staged Assembly Performance Characteristics characteristics
 
 | Metric | Staged Chunks Mode | Direct Sparse Mode (`--direct-write`) |
 |---|---|---|
