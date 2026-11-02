@@ -1,4 +1,4 @@
-# System Architecture — ReliaDL
+# system architecture and design rationale — ReliaDL
 
 > **Audience**: Software Engineers, Architects, Technical Leads
 > **Reading time**: ~20 minutes
