@@ -1,4 +1,4 @@
-# API Reference — ReliaDL
+# API Reference and SDK Surface — ReliaDL
 
 > **Audience**: Developers integrating or extending ReliaDL
 > **Reading time**: ~15 minutes
