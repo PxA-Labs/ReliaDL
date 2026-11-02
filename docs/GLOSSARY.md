@@ -66,3 +66,5 @@
 
 | **HTTP/2** | A major revision of the HTTP protocol (RFC 9113) that adds binary framing, multiplexed streams, and header compression. Used by ReliaDL for improved connection efficiency. |
 
+| **EWMA** | Exponentially Weighted Moving Average. A statistical technique used in the metrics collector to estimate smoothed network throughput and round-trip time. |
+
