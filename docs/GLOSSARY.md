@@ -76,3 +76,5 @@
 
 | **OIDC** | OpenID Connect. An identity layer on top of OAuth 2.0 used by PyPI Trusted Publishers for tokenless, passwordless package publishing from GitHub Actions. |
 
+| **Prometheus** | An open-source systems monitoring and alerting toolkit. ReliaDL exposes download metrics via a Prometheus-compatible HTTP endpoint for scraping. |
+
