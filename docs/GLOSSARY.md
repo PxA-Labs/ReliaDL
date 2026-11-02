@@ -70,3 +70,5 @@
 
 | **Circuit Breaker** | A fault-tolerance design pattern that prevents repeated requests to a failing service. Opens after a threshold of consecutive failures and resets after a cool-down period. |
 
+| **BL-DCS** | Bandwidth-Loss Dynamic Chunk Sizing. A closed-loop algorithm that adjusts chunk sizes based on measured network throughput and packet loss rate. |
+
