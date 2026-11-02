@@ -78,3 +78,5 @@
 
 | **Prometheus** | An open-source systems monitoring and alerting toolkit. ReliaDL exposes download metrics via a Prometheus-compatible HTTP endpoint for scraping. |
 
+| **TLS** | Transport Layer Security. A cryptographic protocol providing end-to-end encryption for network communications. ReliaDL enforces TLS 1.2 or higher for all HTTPS transfers. |
+
