@@ -74,3 +74,5 @@
 
 | **EXP3.S** | A variant of the EXP3 adversarial multi-armed bandit algorithm with shifting guarantees. Used for mirror selection under non-stationary network conditions. |
 
+| **OIDC** | OpenID Connect. An identity layer on top of OAuth 2.0 used by PyPI Trusted Publishers for tokenless, passwordless package publishing from GitHub Actions. |
+
