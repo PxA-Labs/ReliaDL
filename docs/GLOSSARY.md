@@ -82,3 +82,5 @@
 
 | **fsync** | A system call that flushes file data and metadata from kernel buffers to persistent storage. Used by the state manager to guarantee crash-safe checkpoint persistence. |
 
+| **RFC 7233** | The HTTP/1.1 specification for Range Requests, defining the mechanism that allows clients to request specific byte ranges of a resource. Fundamental to ReliaDL's chunked download architecture. |
+
