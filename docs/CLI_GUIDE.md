@@ -147,7 +147,7 @@ Audits the host operating system, Python runtime, file descriptor limits, OpenSS
 
 **Syntax**:
 ```bash
-reliadl doctor
+reliadl doctor  # Run system environment diagnostic
 ```
 
 **Diagnostic Checks**:
