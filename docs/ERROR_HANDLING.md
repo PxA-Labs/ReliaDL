@@ -1,4 +1,4 @@
-# Error Handling & Recovery — ReliaDL
+# error handling and recovery procedures & Recovery — ReliaDL
 
 > **Audience**: Software Engineers, SREs
 > **Reading time**: ~10 minutes
@@ -99,7 +99,7 @@ ReliaDLError (base)
 
 ---
 
-## 2. Error Handling Strategy by Component
+## 2. error handling and recovery procedures Strategy by Component
 
 ### 2.1 Download Engine
 
