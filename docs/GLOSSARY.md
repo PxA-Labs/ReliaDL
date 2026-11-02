@@ -84,3 +84,5 @@
 
 | **RFC 7233** | The HTTP/1.1 specification for Range Requests, defining the mechanism that allows clients to request specific byte ranges of a resource. Fundamental to ReliaDL's chunked download architecture. |
 
+| **Content-Range** | An HTTP response header returned with 206 Partial Content responses, indicating the byte range and total size of the resource being served. Format: `bytes start-end/total`. |
+
