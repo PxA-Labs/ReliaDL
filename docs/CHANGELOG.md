@@ -30,6 +30,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **agents**: Enforce archittmittal-only GitHub account rule
 - Correct dependency claims; surface silently swallowed state errors
 - Evaluation results from 115 seeded runs
+- Correct which mechanism displaces a corrupting mirror
+- Clarify ReliaDL description in glossary terminology
+- Refine Python version description in FAQ
+- Add last-reviewed date annotation to security policy
+- Add HTTP/2 definition to glossary
+- Add EWMA definition to glossary
+- Add inline comment to doctor command in CLI guide
+- Add circuit breaker definition to glossary
+- Refine testing strategy document scope
+- Update architecture document title scope
+- Add BL-DCS algorithm definition to glossary
+- Expand error handling document scope
+- Add EXP3.S algorithm definition to glossary
+- Refine performance document headings
+- Expand data flow document scope description
+- Add OIDC definition to glossary
+- Update API reference document title
+- Standardize cloud storage terminology
+- Add Prometheus definition to glossary
+- Expand observability document scope
+- Add TLS protocol definition to glossary
+- Standardize manifest terminology in specification
+- Add fsync system call definition to glossary
+- Expand user guide document scope
+- Add RFC 7233 range request specification to glossary
+- Add Content-Range header definition to glossary
 
 ### Maintenance & Dependencies
 - **deps**: Update mkdocs-material requirement from >=9.5.0 to >=9.7.7
