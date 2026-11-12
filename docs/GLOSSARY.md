@@ -90,3 +90,5 @@
 - **Chunk Partition**: The division of a file into contiguous, non-overlapping byte ranges for parallel transfer.
 
 - **Write-Fsync-Replace**: Atomic file update protocol using temporary write, fsync, and rename to prevent partial writes on crash.
+
+- **Token Bucket**: Rate limiting algorithm where tokens accrue at a fixed rate and are consumed by transfer operations to enforce bandwidth caps.
