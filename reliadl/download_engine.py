@@ -88,7 +88,7 @@ class RemoteFileInfo:
 
     @property
     def if_range(self) -> Optional[str]:
-        """Validator for ``If-Range``; RFC 9110 only allows a strong ETag or a date."""
+        """Validator for ``If-Range`` per RFC 9110 Section 13.1.5; prefers strong ETag."""
         if self.etag and not self.etag.startswith("W/"):
             return self.etag
         return self.last_modified
