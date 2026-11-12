@@ -593,3 +593,7 @@ The architecture is designed for future extension:
 ## Crash Recovery
 
 The state manager implements a write-fsync-replace protocol that guarantees state file integrity across process crashes and power failures. See `state_manager.py` for implementation details.
+
+## Bandwidth Limiting
+
+The token bucket rate limiter uses a reservation pattern instead of retry, ensuring fair FIFO ordering across concurrent workers without thundering herd behavior.
