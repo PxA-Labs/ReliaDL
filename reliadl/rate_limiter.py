@@ -263,6 +263,7 @@ class TokenBucketRateLimiter:
             self._refill_locked()
             self._tokens -= amount
             self._granted_bytes += amount
+            # Negative balance = tokens already promised; delay = time to accrue
             delay = 0.0 if self._tokens >= 0.0 else (-self._tokens) / self._rate
             if delay > 0.0:
                 self._waits += 1
