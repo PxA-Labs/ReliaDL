@@ -499,7 +499,7 @@ def run_hash_tree(args: argparse.Namespace) -> int:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _engine_config(args: argparse.Namespace) -> DownloadConfig:
-    """Load the layered YAML/env configuration with command-line overrides on top."""
+    """Load the layered YAML/env configuration with command-line overrides applied last."""
     download: dict[str, Any] = {}
     network: dict[str, Any] = {}
     if getattr(args, "workers", None) is not None:
