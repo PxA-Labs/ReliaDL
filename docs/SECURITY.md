@@ -246,3 +246,8 @@ Mitigation:
 
 <!-- Last reviewed: 2026-11-02 -->
 
+
+
+## Credential Redaction
+
+The structured logging subsystem automatically redacts sensitive headers (Authorization, Proxy-Authorization, API keys, Bearer tokens) and URL-embedded credentials before log emission, following OWASP logging guidelines.
