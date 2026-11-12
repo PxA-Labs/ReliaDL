@@ -32,6 +32,7 @@ from reliadl.state_manager import StateManager
 
 logger = get_logger("reliadl.cli")
 
+# Semantic version following https://semver.org
 __version__ = "0.3.0"
 
 
