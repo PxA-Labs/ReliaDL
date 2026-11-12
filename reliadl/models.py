@@ -296,6 +296,7 @@ class DownloadState:
     version: str = "1.0.0"
 
     def __post_init__(self) -> None:
+        """Default output_path to target_path when not explicitly provided."""
         if self.output_path is None:
             self.output_path = self.target_path
 
