@@ -201,7 +201,8 @@ class DownloadEngine:
         # tracked separately so a retried chunk does not count twice.
         self._in_flight: dict[int, int] = {}
         self._state: Optional[DownloadState] = None
-        # Checkpointing is serialized and rate-limited. Serialized because every
+        # -- Checkpointing configuration --
+    # Checkpointing is serialized and rate-limited. Serialized because every
         # worker writes the same DownloadState object to the same path, so two
         # concurrent saves would interleave; rate-limited because a checkpoint
         # fsyncs the output file and rewrites the whole state JSON, and doing that
