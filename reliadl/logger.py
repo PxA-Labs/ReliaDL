@@ -138,6 +138,7 @@ def configure_logger(
         root_logger.addHandler(file_handler)
 
     if _HAS_STRUCTLOG:
+        # Processor chain: context merge -> level -> format -> redact
         shared_processors: list[Processor] = [
             structlog.contextvars.merge_contextvars,
             structlog.stdlib.add_logger_name,
