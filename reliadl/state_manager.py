@@ -316,6 +316,7 @@ class StateManager:
           otherwise reset to PENDING.
         """
         c_dir = Path(chunk_dir).resolve()
+        # Rebuild chunk list with status reconciled against on-disk state
         updated_chunks: list[ChunkState] = []
 
         for chunk in state.chunks:
