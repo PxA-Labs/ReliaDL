@@ -101,6 +101,7 @@ def _planned_end(state: DownloadState) -> int:
 
 def plan_chunks(file_size: int, chunk_size: int) -> list[ChunkState]:
     """Split ``file_size`` bytes into contiguous, non-overlapping chunk states."""
+    # chunk_size must be positive to avoid infinite loop in range generation
     if chunk_size <= 0:
         raise ValueError(f"chunk_size must be positive, got {chunk_size}")
     return [
