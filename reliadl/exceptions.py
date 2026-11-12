@@ -588,7 +588,7 @@ class AssemblyFailedError(AssemblyError):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class RangeNotSupportedError(NetworkError):
-    """Raised when the origin cannot serve byte ranges or does not report a file size."""
+    """Raised when the origin does not support HTTP byte-range requests (RFC 7233)."""
 
     default_retryable: bool = False
 
