@@ -100,6 +100,7 @@ class ChunkSpec:
     expected_hash: Optional[str] = None
 
     def __post_init__(self) -> None:
+        # Validate invariants: non-negative index and valid byte range
         if self.index < 0:
             raise ValueError(f"Chunk index must be non-negative, got {self.index}")
         if self.start_byte < 0:
