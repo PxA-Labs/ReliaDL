@@ -68,6 +68,7 @@ from reliadl.state_manager import StateManager
 
 logger = get_logger("reliadl.download_engine")
 
+# Temporary suffix for in-progress downloads; renamed on completion
 PART_SUFFIX = ".part"
 _REVALIDATE_READ_SIZE = 1024 * 1024
 
