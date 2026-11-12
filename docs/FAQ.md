@@ -166,3 +166,8 @@ A ChunkGuard Manifest is a cryptographically signed (Ed25519) JSON file that lis
 | Works with any HTTP server | [NO] | [YES] |
 | Firewall friendly | [NO] (needs ports) | [YES] (outbound HTTPS only) |
 
+
+
+### Why does ReliaDL use hmac.compare_digest for hash comparison?
+
+Standard string equality (`==`) leaks timing information proportional to the shared prefix length. `hmac.compare_digest` runs in constant time regardless of where digests differ, preventing timing side-channel attacks.
