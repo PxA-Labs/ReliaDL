@@ -20,6 +20,7 @@ except ImportError:
     _HAS_STRUCTLOG = False
 
 # Sensitive key names to automatically redact (case-insensitive)
+# OWASP: never log authentication tokens or session identifiers
 _SENSITIVE_KEYS = {
     "authorization",
     "proxy-authorization",
