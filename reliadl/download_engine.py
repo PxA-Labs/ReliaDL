@@ -70,6 +70,7 @@ logger = get_logger("reliadl.download_engine")
 
 # Temporary suffix for in-progress downloads; renamed on completion
 PART_SUFFIX = ".part"
+# 1 MiB buffer for chunk revalidation during session resume
 _REVALIDATE_READ_SIZE = 1024 * 1024
 
 ProgressCallback = Callable[[ProgressReport], None]
