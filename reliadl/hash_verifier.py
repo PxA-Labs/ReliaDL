@@ -25,7 +25,7 @@ from reliadl.models import VerificationResult
 # Default streaming buffer chunk size (64 KB)
 DEFAULT_BUFFER_SIZE = 64 * 1024
 
-# Supported secure cryptographic hash algorithms
+# Supported secure cryptographic hash algorithms (NIST FIPS 180-4)
 SUPPORTED_ALGORITHMS = {"sha256", "sha384", "sha512"}
 
 # Insecure algorithms disallowed by security policy
