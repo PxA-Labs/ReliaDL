@@ -550,7 +550,7 @@ def _run_engine_session(
             try:
                 loop.add_signal_handler(sig, engine.request_shutdown)
                 installed.append(sig)
-            except (NotImplementedError, RuntimeError, ValueError):
+            except (NotImplementedError, RuntimeError, ValueError):  # Windows lacks POSIX signals
                 # Windows event loops have no signal handlers; Ctrl+C there
                 # cancels the session task, which checkpoints the same way.
                 pass
