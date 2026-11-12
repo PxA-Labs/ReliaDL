@@ -53,7 +53,11 @@ class ChunkStatus(str, Enum):
 
 
 class DownloadStatus(str, Enum):
-    """Lifecycle status of a download session."""
+    """
+    Lifecycle status of a download session.
+
+    Terminal states: COMPLETE, COMPLETED, FAILED, CANCELLED.
+    """
 
     PENDING = "PENDING"
     IN_PROGRESS = "IN_PROGRESS"
