@@ -26,7 +26,7 @@ from reliadl.models import DownloadConfig
 DEFAULT_CONFIG_FILENAME = "default_config.yaml"
 
 
-# Unit multiplier lookup table for byte conversion
+# Unit multiplier lookup table for byte conversion (IEC 80000-13 binary prefixes)
 _BYTE_UNITS = {
     "": 1,
     "b": 1,
