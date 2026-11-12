@@ -28,7 +28,7 @@ DEFAULT_BUFFER_SIZE = 64 * 1024
 # Supported secure cryptographic hash algorithms (NIST FIPS 180-4)
 SUPPORTED_ALGORITHMS = {"sha256", "sha384", "sha512"}
 
-# Insecure algorithms disallowed by security policy
+# Insecure algorithms disallowed by security policy (MD5, SHA-1 are broken)
 DISALLOWED_ALGORITHMS = {"md5", "sha1"}
 
 
