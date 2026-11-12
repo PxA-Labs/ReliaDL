@@ -57,6 +57,9 @@ def parse_size(size_val: Union[str, int, float]) -> int:
         parse_size("1.5 GB") -> 1610612736
         parse_size(1024) -> 1024
 
+    Returns:
+        Integer byte count after unit conversion.
+
     Raises:
         ConfigurationError: If the string cannot be parsed or represents negative size.
     """
