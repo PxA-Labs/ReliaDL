@@ -181,7 +181,7 @@ class HTTPError(NetworkError):
         # Determine default retryability based on HTTP status code if not explicitly given
         if is_retryable is None:
             if status_code is not None:
-                # 408 (Request Timeout) and 429 (Too Many Requests) or 5xx are retryable
+                # RFC 7231: 408 Request Timeout, 429 Too Many Requests, 5xx are retryable
                 is_retryable = status_code in (408, 429) or (500 <= status_code <= 599)
             else:
                 is_retryable = self.default_retryable
