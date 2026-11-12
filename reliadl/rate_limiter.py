@@ -412,7 +412,7 @@ class UnlimitedRateLimiter:
         return 0.0
 
     async def acquire(self, amount: int) -> float:
-        """Grant immediately."""
+        """Grant immediately; null object pattern means no delay ever occurs."""
         self._granted_bytes += max(0, amount)
         return 0.0
 
