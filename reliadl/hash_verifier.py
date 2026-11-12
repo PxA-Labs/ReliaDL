@@ -74,6 +74,7 @@ def constant_time_compare(hash_a: str, hash_b: str) -> bool:
         norm_b = normalize_hash(hash_b)
     except ConfigurationError:
         return False
+    # hmac.compare_digest prevents timing side-channel attacks
     return hmac.compare_digest(norm_a, norm_b)
 
 
