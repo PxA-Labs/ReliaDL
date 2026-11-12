@@ -171,3 +171,7 @@ A ChunkGuard Manifest is a cryptographically signed (Ed25519) JSON file that lis
 ### Why does ReliaDL use hmac.compare_digest for hash comparison?
 
 Standard string equality (`==`) leaks timing information proportional to the shared prefix length. `hmac.compare_digest` runs in constant time regardless of where digests differ, preventing timing side-channel attacks.
+
+### What is the recommended chunk size?
+
+The default 8 MB chunk size balances parallelism overhead against per-chunk retry cost. Use `--adaptive-chunks` to let the BL-DCS controller optimize chunk size based on measured bandwidth and RTT.
