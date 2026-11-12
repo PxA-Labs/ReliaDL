@@ -109,7 +109,7 @@ def configure_logger(
 
     Args:
         level: Log verbosity ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL')
-        format_type: Output formatting ('json' or 'text')
+        format_type: Output formatting ('json' for machine parsing, 'text' for human readability)
         log_file: Optional path for destination log file
     """
     log_level = get_log_level_value(level)
