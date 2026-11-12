@@ -1,5 +1,6 @@
 """
 Configuration loader, parser, and unit conversion utilities for ReliaDL.
+Handles hierarchical YAML merging with environment variable overrides.
 Supports YAML configuration hierarchies, environment variable overrides,
 byte-string unit conversions, and validation into DownloadConfig models.
 """
