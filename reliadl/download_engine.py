@@ -196,7 +196,8 @@ class DownloadEngine:
         self._limiter: Optional[TokenBucketRateLimiter] = None
         if self._config.max_bandwidth_bytes_per_sec > 0:
             self._limiter = TokenBucketRateLimiter(float(self._config.max_bandwidth_bytes_per_sec))
-        # Per-session progress accounting; bytes of chunks still in flight are
+        # -- Per-session progress accounting --
+    # Bytes of chunks still in flight are
         # tracked separately so a retried chunk does not count twice.
         self._in_flight: dict[int, int] = {}
         self._state: Optional[DownloadState] = None
