@@ -179,3 +179,7 @@ The default 8 MB chunk size balances parallelism overhead against per-chunk retr
 ### How does adaptive mirror routing work?
 
 The EXP3.S adversarial bandit algorithm assigns probability weights to mirrors based on observed throughput and failure rates. Mirrors with circuit-breaker trips are temporarily excluded, and weights converge toward the best-performing mirrors.
+
+### Why does ReliaDL check disk space before downloading?
+
+Pre-flight disk space validation prevents a long transfer from failing at the final write. The `pre_check_disk_space` option (enabled by default) verifies sufficient free space before allocating the sparse output file.
