@@ -1,5 +1,6 @@
 """
 Streaming cryptographic hash verification subsystem for ReliaDL.
+Provides NIST-compliant SHA-2 family digest computation with constant-time comparison.
 Implements incremental 64 KB buffer streaming verification, constant-time
 digest comparison via hmac.compare_digest, and NIST compliance.
 """
