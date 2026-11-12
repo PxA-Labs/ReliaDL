@@ -94,3 +94,5 @@
 - **Token Bucket**: Rate limiting algorithm where tokens accrue at a fixed rate and are consumed by transfer operations to enforce bandwidth caps.
 
 - **Reservation Pattern**: Concurrency strategy where callers deduct tokens immediately and sleep for the computed deficit, ensuring fair FIFO ordering.
+
+- **Sparse File**: A file that represents large zero-byte regions without allocating physical disk blocks, used for pre-allocated download targets.
