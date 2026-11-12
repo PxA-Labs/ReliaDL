@@ -13,7 +13,7 @@ from typing import Any, Optional
 
 class ReliaDLError(Exception):
     """
-    Root base exception for all ChunkGuard / ReliaDL operational errors.
+    Root base exception for all ReliaDL operational errors.
 
     Provides structured context, retryability classification, and JSON serialization.
     """
