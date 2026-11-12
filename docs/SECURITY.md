@@ -251,3 +251,7 @@ Mitigation:
 ## Credential Redaction
 
 The structured logging subsystem automatically redacts sensitive headers (Authorization, Proxy-Authorization, API keys, Bearer tokens) and URL-embedded credentials before log emission, following OWASP logging guidelines.
+
+## State File Permissions
+
+State files are created with POSIX mode 0600 (owner read/write only) to prevent unauthorized access to download session metadata including URLs and ETags.
