@@ -594,7 +594,7 @@ class RangeNotSupportedError(NetworkError):
 
 
 class DownloadCancelledError(ReliaDLError):
-    """Raised when a download is interrupted on request after its state has been saved."""
+    """Raised when a download is gracefully interrupted via SIGINT/SIGTERM after checkpointing."""
 
     default_retryable: bool = False
 
