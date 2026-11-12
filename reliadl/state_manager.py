@@ -36,6 +36,8 @@ CHUNK_FILE_PERMISSIONS = 0o600
 class StateManager:
     """
     Manages atomic persistence and crash recovery of download session states.
+
+    Uses write-fsync-replace protocol to guarantee state file integrity across crashes.
     """
 
     def __init__(
