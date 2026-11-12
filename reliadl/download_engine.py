@@ -212,7 +212,7 @@ class DownloadEngine:
         self._scheduler: Optional[TransferScheduler] = None
         # chunk index -> mirrors that already failed this chunk, this session only
         self._failed_mirrors: dict[int, list[str]] = {}
-        # chunk index -> per-sub-block SHA-256 digests from the manifest, when one
+        # chunk index -> per-sub-block SHA-256 digests (SBM-IA localization) from the manifest, when one
         # was supplied. Their presence is what makes localization possible: without
         # them a chunk is verifiable only as a whole.
         self._sub_blocks: dict[int, list[str]] = {}
