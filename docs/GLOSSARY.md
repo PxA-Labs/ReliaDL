@@ -86,3 +86,5 @@
 
 | **Content-Range** | An HTTP response header returned with 206 Partial Content responses, indicating the byte range and total size of the resource being served. Format: `bytes start-end/total`. |
 
+
+- **Chunk Partition**: The division of a file into contiguous, non-overlapping byte ranges for parallel transfer.
