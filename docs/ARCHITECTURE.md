@@ -588,3 +588,8 @@ The architecture is designed for future extension:
 | Storage Backends | Abstract `Storage` interface | Cloud storage, NFS, memory (testing) |
 | Authentication | Header injection middleware | OAuth, API keys, custom auth |
 
+
+
+## Crash Recovery
+
+The state manager implements a write-fsync-replace protocol that guarantees state file integrity across process crashes and power failures. See `state_manager.py` for implementation details.
