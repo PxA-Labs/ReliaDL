@@ -124,6 +124,8 @@ class StreamingHashVerifier:
     def update(self, chunk: Union[bytes, bytearray, memoryview]) -> None:
         """
         Feed an incremental byte chunk into the running hash calculation.
+
+        Accepts bytes, bytearray, or memoryview for zero-copy streaming.
         """
         self._hasher.update(chunk)
         self._bytes_processed += len(chunk)
