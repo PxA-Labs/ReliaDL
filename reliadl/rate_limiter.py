@@ -61,7 +61,8 @@ from reliadl.exceptions import ConfigurationError
 # long idle period turn into an unbounded burst.
 DEFAULT_BURST_SECONDS = 1.0
 
-# Floor on a configured rate, in bytes per second. Below this a single chunk
+# Floor on a configured rate, in bytes per second. Prevents division-by-zero
+# and nonsensical throttling where the limiter dominates transfer time. Below this a single chunk
 # would take long enough that the limiter, rather than the network, is the
 # thing being tested.
 MIN_RATE_BPS = 1.0
