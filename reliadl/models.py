@@ -433,7 +433,11 @@ class VerificationResult:
 
 @dataclass(frozen=True)
 class ProgressReport:
-    """Point-in-time progress telemetry snapshot for callbacks and monitoring."""
+    """
+    Point-in-time progress telemetry snapshot for callbacks and monitoring.
+
+    Emitted at intervals configured by progress_update_interval_seconds.
+    """
 
     download_id: str
     timestamp: datetime
