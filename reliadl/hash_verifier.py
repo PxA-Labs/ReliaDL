@@ -20,6 +20,7 @@ from reliadl.exceptions import (
 )
 from reliadl.models import VerificationResult
 
+# -- Module Constants --
 # Default streaming buffer chunk size (64 KB)
 DEFAULT_BUFFER_SIZE = 64 * 1024
 
