@@ -175,3 +175,7 @@ Standard string equality (`==`) leaks timing information proportional to the sha
 ### What is the recommended chunk size?
 
 The default 8 MB chunk size balances parallelism overhead against per-chunk retry cost. Use `--adaptive-chunks` to let the BL-DCS controller optimize chunk size based on measured bandwidth and RTT.
+
+### How does adaptive mirror routing work?
+
+The EXP3.S adversarial bandit algorithm assigns probability weights to mirrors based on observed throughput and failure rates. Mirrors with circuit-breaker trips are temporarily excluded, and weights converge toward the best-performing mirrors.
