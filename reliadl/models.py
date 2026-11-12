@@ -21,7 +21,12 @@ except ImportError:
 
 
 class ChunkStatus(str, Enum):
-    """Lifecycle status of an individual chunk."""
+    """
+    Lifecycle status of an individual chunk.
+
+    Transitions: PENDING -> IN_PROGRESS -> VERIFYING -> COMPLETE
+                                        -> FAILED -> ABANDONED (max retries)
+    """
 
     PENDING = "PENDING"
     DOWNLOADING = "DOWNLOADING"
