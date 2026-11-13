@@ -118,6 +118,8 @@ class MirrorStats:
     ranged_requests: int = 0
     bytes_written: int = 0
     """Bytes actually written to sockets, including bytes the client discarded."""
+    whole_requests: int = 0
+    """Whole-file (non-ranged) GETs served, used to key their fault draws."""
     failures_injected: int = 0
     corruptions_injected: int = 0
     truncations_injected: int = 0
@@ -272,10 +274,35 @@ class _FaultyHandler(BaseHTTPRequestHandler):
                 self.send_header(key, value)
             self.end_headers()
             if not head:
+                # Corruption applies here too. It previously did not, and the
+                # consequence was quietly misleading: a single-stream tool sends
+                # no Range header, so it never met the fault, and a baseline
+                # table showed it verifying every run next to a parallel tool
+                # that failed half of them. That reads as "more robust" when the
+                # truth is "not tested" -- neither tool checks integrity at all.
+                # Keyed on offset 0 and the whole-file request count, mirroring
+                # the ranged path so retries are not doomed forever.
+                with srv.lock:
+                    srv.stats.whole_requests += 1
+                    whole_attempt = srv.stats.whole_requests
+                body = srv.payload
+                if profile.corruption_rate and _draw(
+                    srv.seed, 0, 3, whole_attempt
+                ) < profile.corruption_rate:
+                    mutable = bytearray(body)
+                    if mutable:
+                        position = int(
+                            _draw(srv.seed, 0, 4, whole_attempt) * len(mutable)
+                        )
+                        mutable[position] ^= 0xFF
+                        with srv.lock:
+                            srv.stats.corruptions_injected += 1
+                            srv.stats.corrupted_offsets.append(position)
+                    body = bytes(mutable)
                 try:
-                    written = self._paced_write(srv.payload, profile.bandwidth_bps)
+                    written = self._paced_write(body, profile.bandwidth_bps)
                 except (BrokenPipeError, ConnectionResetError, OSError):
-                    written = len(srv.payload)
+                    written = len(body)
                 with srv.lock:
                     srv.stats.bytes_written += written
             return

@@ -296,36 +296,52 @@ These bound what the numbers mean, and they are not minor.
    file. Left at their defaults they would make aria2 look far worse than it is.
 
    **On a clean path, aria2c is substantially faster than ReliaDL** (64 MB,
-   4 workers, 5 seeds):
+   4 workers, 30 repetitions):
 
    | Tool | Median | Goodput | |
    | :--- | ---: | ---: | :--- |
-   | aria2c | 0.80 s | **79.8 MB/s** | parallel |
-   | ReliaDL | 1.26 s | 50.7 MB/s | parallel |
-   | curl | 2.68 s | 23.9 MB/s | single stream |
+   | aria2c | 0.78 s | **82.9 MB/s** | parallel |
+   | ReliaDL | 1.25 s | 51.4 MB/s | parallel |
+   | curl | 2.64 s | 24.3 MB/s | single stream |
    | axel, wget | — | — | not installed |
 
-   aria2c is roughly 1.6x faster. That is the expected shape — aria2 is C++ and
-   ReliaDL is Python asyncio — and it is reported because the comparison was run,
-   not because it is flattering. **No claim in this project is that ReliaDL is
-   the fastest parallel downloader, and this result says it is not.**
+   aria2c is roughly 1.6x faster. That is the expected shape -- aria2 is C++ and
+   ReliaDL is Python asyncio -- and it is reported because the comparison was
+   run, not because it is flattering. **No claim in this project is that ReliaDL
+   is the fastest parallel downloader, and this result says it is not.**
 
-   **On a corrupting mirror the ordering reverses, and that is the point.** Same
-   payload and seeds, against a mirror silently corrupting one byte in 20% of
-   responses:
+   **On a corrupting mirror the ordering reverses.** Same payload and seeds,
+   against a mirror silently corrupting one byte in 20% of responses, 30
+   repetitions:
 
-   | Tool | Exited 0 | Delivered a file matching its SHA-256 |
-   | :--- | ---: | ---: |
-   | aria2c | 5/5 | **3/5** |
-   | ReliaDL (`baseline`, no manifest) | 1/5 | 1/5 |
-   | ReliaDL (`localization`, manifest) | 5/5 | 5/5 |
+   | Tool | Exited 0 | Delivered a file matching its SHA-256 | Silently wrong |
+   | :--- | ---: | ---: | ---: |
+   | aria2c | 30/30 | 13/30 | **17/30** |
+   | curl | 30/30 | 22/30 | **8/30** |
+   | ReliaDL (`baseline`, no manifest) | 3/30 | 3/30 | **0** |
+   | ReliaDL (`localization`, manifest) | 30/30 | 30/30 | **0** |
 
-   aria2c reported success on every run and handed back a full-size, silently
-   wrong 64 MB file on two of them. Nothing in its output distinguishes those two
-   runs from the other three. ReliaDL without a manifest detects the corruption
-   and refuses to deliver, which is why its exit status is 1 on four runs; with a
-   manifest it repairs and completes. This is the comparison the project exists
-   to make, and it is the one place where being 1.6x slower is the correct trade.
+   Both external tools report success while handing back a full-size, wrong
+   file, and nothing in their output distinguishes those runs from the good
+   ones. ReliaDL without a manifest detects the corruption and refuses to
+   deliver, which is why it exits non-zero on 27 of 30; with a manifest it
+   repairs and completes every run.
+
+   The two external rates differ for a reason worth stating: curl issues one
+   whole-file request and therefore meets a single corruption draw, so its 27%
+   tracks the 20% injection rate closely. aria2c issues many ranged requests and
+   is almost certain to meet at least one, which is why it fails more often. The
+   exposure grows with the number of requests, which is precisely the direction
+   parallelism pushes.
+
+   **A harness defect found while producing this table.** The mirror previously
+   injected corruption only on ranged requests, leaving whole-file GETs
+   pristine. curl sends no `Range` header, so it never met the fault and
+   verified 30/30 -- which in a table next to aria2c reads as "more robust" when
+   the truth was "not tested". Neither tool checks integrity at all. Whole-file
+   GETs are now subject to the same injection, and the numbers above are from
+   the corrected harness.
+
 6. **Thirty repetitions, and the limits of what they support.** Paired
    comparisons report a bootstrap interval and an exact sign test, so a result
    whose interval excludes zero and whose sign test is significant does support a
