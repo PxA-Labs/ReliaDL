@@ -4,12 +4,23 @@ BL-DCS (Bandwidth-Loss Closed-Loop Dynamic Chunk Sizing) controller for ReliaDL.
 Translates the smoothed network state produced by the metrics collector into an
 optimal chunk size at each decision epoch:
 
-    S* = clamp( gamma * sqrt( tau_overhead * mu_k * MSS / (8 * p_k + eps) )
+    S* = clamp( gamma * sqrt( tau_overhead * mu_k * MSS / (p_k + eps) )
                 + lambda * mu_k * tau_k,
                 S_min, S_max )
 
 Two corrections to the bare formulation are applied, both required for the
 controller to produce byte counts that mean anything.
+
+A third "correction" used to be applied and was wrong. The radicand carried an
+extra factor of 8 in the denominator, which is the conversion one would need if
+mu were a bit rate. It is not: NetworkSample.throughput_bps is
+bytes_transferred / duration_seconds, bytes per second (metrics_collector.py),
+so the factor divided an already-byte-valued quantity a second time and made
+every loss-driven chunk sqrt(8) ~ 2.83x smaller than the derivation below
+prescribes. It had no effect on a clean path, where the loss term saturates the
+upper clamp either way, and a large one wherever loss actually drives the
+decision. Removed; test_loss_term_matches_closed_form pins the closed form so it
+cannot return silently.
 
 The MSS factor inside the radical gives dimensional consistency: it makes the
 radicand a byte-squared quantity, so the root yields bytes rather than the
@@ -297,9 +308,11 @@ class BLDCSController:
         observed_size = state.mean_transfer_bytes or float(self._default)
         segment_drop = self._segment_loss_rate(drop, observed_size)
 
+        # sqrt(tau * mu * MSS / p_seg) exactly as derived in the module docstring.
+        # throughput is bytes/second, so no bit/byte conversion belongs here.
         loss_term = self._gamma * math.sqrt(
             (self._overhead * throughput * self._mss)
-            / (8.0 * segment_drop + self._epsilon)
+            / (segment_drop + self._epsilon)
         )
         bdp_term = self._lambda * throughput * rtt
         raw = loss_term + bdp_term
