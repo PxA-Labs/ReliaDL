@@ -94,7 +94,7 @@ httpx[socks]              # `pip install reliadl[socks]`, for SOCKS5 proxies
 Checked in order (first found wins):
 
 1. `--config` CLI flag
-2. `ReliaDL_CONFIG` environment variable
+2. `RELIADL_CONFIG` environment variable
 3. `./ReliaDL.yaml` (current directory)
 4. `~/.config/ReliaDL/config.yaml` (user config)
 5. Built-in defaults
@@ -141,23 +141,38 @@ progress:
 
 ### 3.3 Environment Variable Reference
 
+Two forms are read, and the prefix is case-sensitive: `RELIADL_`, not
+`ReliaDL_`. `CHUNKGUARD_` is accepted as a legacy alias for both forms.
+
+**Named shortcuts** — a fixed list, each mapped to one setting:
+
 ```bash
-# Core settings
-export ReliaDL_CHUNK_SIZE="16MB"
-export ReliaDL_WORKERS=8
-export ReliaDL_RETRIES=5
-
-# Network
-export ReliaDL_CONNECT_TIMEOUT=15
-export ReliaDL_READ_TIMEOUT=120
-export ReliaDL_VERIFY_SSL=true
-export ReliaDL_HTTP2=true
-
-# Logging
-export ReliaDL_LOG_LEVEL=INFO
-export ReliaDL_LOG_FORMAT=json
-export ReliaDL_LOG_FILE=/var/log/ReliaDL/download.log
+export RELIADL_CHUNK_SIZE="16MB"
+export RELIADL_WORKERS=8
+export RELIADL_RETRIES=5
+export RELIADL_VERIFY_SSL=true
+export RELIADL_HTTP2=true
+export RELIADL_USER_AGENT="ReliaDL/1.0"
+export RELIADL_LOG_LEVEL=INFO
+export RELIADL_LOG_FORMAT=json
 ```
+
+**Generic `SECTION__KEY` form** — reaches any key in the YAML, using a double
+underscore to separate section from key. Use this for anything without a
+shortcut:
+
+```bash
+export RELIADL_NETWORK__CONNECT_TIMEOUT=15
+export RELIADL_NETWORK__READ_TIMEOUT=120
+export RELIADL_NETWORK__MAX_REDIRECTS=10
+export RELIADL_LOGGING__FILE=/var/log/reliadl/download.log
+export RELIADL_DOWNLOAD__MANIFEST_PATH=/etc/reliadl/artifact.cgmanifest
+```
+
+There is no `RELIADL_CONNECT_TIMEOUT`, `RELIADL_READ_TIMEOUT` or
+`RELIADL_LOG_FILE` shortcut; earlier revisions of this guide listed all three,
+and because an unrecognized variable is ignored rather than rejected, setting
+them changed nothing and reported nothing.
 
 ---
 
@@ -185,20 +200,22 @@ ReliaDL emits structured JSON logs that integrate with any log aggregation syste
 
 ### 4.2 Metrics for Dashboards
 
-| Metric | Type | Description |
-|---|---|---|
-| `ReliaDL_downloads_total` | Counter | Total downloads attempted |
-| `ReliaDL_downloads_completed` | Counter | Successfully completed downloads |
-| `ReliaDL_downloads_failed` | Counter | Failed downloads |
-| `ReliaDL_chunks_downloaded_total` | Counter | Total chunks downloaded |
-| `ReliaDL_chunks_retried_total` | Counter | Chunks that required retry |
-| `ReliaDL_chunks_abandoned_total` | Counter | Chunks that exceeded max retries |
-| `ReliaDL_bytes_downloaded_total` | Counter | Total bytes transferred |
-| `ReliaDL_download_duration_seconds` | Histogram | Download duration distribution |
-| `ReliaDL_chunk_download_duration_seconds` | Histogram | Per-chunk duration |
-| `ReliaDL_download_speed_bytes_per_second` | Gauge | Current download speed |
-| `ReliaDL_hash_mismatches_total` | Counter | Hash verification failures |
-| `ReliaDL_active_workers` | Gauge | Currently active download workers |
+[OBSERVABILITY.md](OBSERVABILITY.md) section 2.1 is the single source of truth
+for metric names and carries the current wiring status. In summary: six metrics
+are registered, all under the legacy `chunkguard_` namespace, all unlabelled,
+and the engine does not yet increment any of them — a scrape returns zeros.
+
+| Metric | Type |
+|---|---|
+| `chunkguard_bytes_downloaded_total` | Counter |
+| `chunkguard_chunk_retries_total` | Counter |
+| `chunkguard_chunk_download_duration_seconds` | Histogram |
+| `chunkguard_chunk_throughput_bytes_per_second` | Histogram |
+| `chunkguard_active_workers` | Gauge |
+| `chunkguard_download_progress_ratio` | Gauge |
+
+An earlier revision of this guide listed twelve `ReliaDL_*` metrics, including
+`ReliaDL_hash_mismatches_total`. None of those names exist.
 
 ### 4.3 Example Grafana Dashboard Panels
 

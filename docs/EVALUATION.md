@@ -58,8 +58,8 @@ Completion rate (runs where the file was delivered and verified, out of 5):
 | Scenario | `baseline` | `adaptive-chunks` | `adaptive-mirrors` | `localization` | `routing+localization` |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `corrupting` | **0/5** | **0/5** | — | 5/5 | — |
-| `byzantine` | **0/5** | **0/5** | 2/5 | 5/5 | 5/5 |
-| `flaky` | 2/5 | 1/5 | 4/5 | 5/5 | 5/5 |
+| `byzantine` | **0/5** | **0/5** | **0/5** | 5/5 | 5/5 |
+| `flaky` | 1/5 | 1/5 | 3/5 | 5/5 | 5/5 |
 
 This is the clearest result in the set, and it is about correctness rather than
 speed. Without per-chunk digests from a manifest, silent corruption is caught only
@@ -73,11 +73,11 @@ digests the corrupt chunk is repaired and the transfer completes every time.
 
 | Policy | Goodput | Wasted bytes | Bytes taken from the corrupting mirror |
 | :--- | ---: | ---: | ---: |
-| `localization` | 42.1 MB/s | 42.2% | 100% |
-| `routing+localization` | 33.3 MB/s | **6.1%** | **18.6%** |
+| `localization` | 38.2 MB/s | 44.7% | 100% |
+| `routing+localization` | 29.9 MB/s | **4.2%** | **23.4%** |
 
-Routing costs about 20% of goodput and returns a 7x reduction in wasted bytes.
-The same pattern holds on `flaky` (45.5% versus 100%).
+Routing costs about 22% of goodput and returns roughly a tenfold reduction in
+wasted bytes. The same pattern holds on `flaky` (33.3% versus 100%).
 
 **Which mechanism does the work, corrected.** An earlier version of this document
 credited the bandit: EXP3.S scores a failed request as zero reward, a chunk that
@@ -109,8 +109,8 @@ deliberately averages away.
 
 | Scenario | `baseline` | `adaptive-mirrors` | |
 | :--- | ---: | ---: | :--- |
-| `failover` (origin collapses mid-transfer) | 7.9 MB/s | **11.9 MB/s** | +50% |
-| `heterogeneous` (origin is the fastest of three) | 50.9 MB/s | 24.3 MB/s | **-52%** |
+| `failover` (origin collapses mid-transfer) | 8.6 MB/s | **16.5 MB/s** | +91% |
+| `heterogeneous` (origin is the fastest of three) | 46.7 MB/s | 28.4 MB/s | **-39%** |
 
 Both directions are real and both are expected. Exploration is what lets the
 router find a better mirror when the current one degrades, and it is pure cost
@@ -126,31 +126,45 @@ falls on both equally:
 
 | Scenario | Floor off | Floor on | |
 | :--- | ---: | ---: | :--- |
-| `clean` | 28.8 MB/s | 52.1 MB/s | +81% |
-| `heterogeneous` | 28.7 MB/s | 53.9 MB/s | +88% |
-| `failover` | 3.6 MB/s | 8.9 MB/s | +146% |
-| `lossy` | 43.9 MB/s | 46.1 MB/s | +5% |
+| `clean` | 28.3 MB/s | 46.6 MB/s | +65% |
+| `heterogeneous` | 25.1 MB/s | 45.3 MB/s | +80% |
+| `failover` | 3.6 MB/s | 8.9 MB/s | +145% |
+| `lossy` | 46.2 MB/s | 47.9 MB/s | +4% |
+
+Reproduce with `python -m benchmarks.ablations.concurrency_floor --repetitions 5`.
+The matrix has no floor-disabled arm, so this A/B lives in its own script, which
+switches the floor off inside the scheduler for one arm and runs the two arms
+back to back on each seed.
 
 Unconstrained, the BL-DCS controller grows the chunk until fewer chunks remain
 than there are workers and the pool starves; on `failover` a single 32 MB chunk
 landing on the degraded mirror stalls everything behind it. See
 [ALGORITHMS.md](ALGORITHMS.md) for the derivation.
 
-**But adaptive sizing still does not beat a well-chosen fixed chunk size:**
+**Adaptive sizing against a well-chosen fixed chunk size**, median [IQR]:
 
-| Scenario | `baseline` (fixed 4 MB) | `adaptive-chunks` |
-| :--- | ---: | ---: |
-| `clean` | 53.5 MB/s | 52.8 MB/s |
-| `lossy` | 51.9 MB/s | 46.7 MB/s |
-| `heterogeneous` | 50.9 MB/s | 46.2 MB/s |
-| `failover` | 7.9 MB/s | **9.0 MB/s** |
+| Scenario | `baseline` (fixed 4 MB) | `adaptive-chunks` | |
+| :--- | ---: | ---: | :--- |
+| `clean` | 48.2 [47.1-49.6] | 47.9 [46.3-49.9] | -0.5% |
+| `lossy` | 48.2 [46.1-49.9] | 48.9 [48.6-49.8] | +1.3% |
+| `heterogeneous` | 46.7 [46.1-49.1] | 49.4 [48.7-51.7] | +5.8% |
+| `failover` | 8.6 [8.6-8.7] | 8.9 [8.6-8.9] | +3.0% |
 
-Parity on `clean`, a win on `failover`, modestly worse on the other two. The
-honest conclusion is that the floor repairs a large regression rather than
-delivering an improvement, and that 4 MB happens to be a good fixed size for this
-workload. The controller's value would have to come from paths where the right
-fixed size is not known in advance, and that case is not tested here -- one file
-size and one worker count cannot show it.
+This **supersedes an earlier result** in which adaptive sizing was 9-10% worse on
+`lossy` and `heterogeneous`. That measurement was taken against a controller whose
+loss term carried a stray factor of 8 -- a bit-rate conversion applied to a
+throughput already in bytes per second -- which made every loss-driven chunk
+`sqrt(8)` ~ 2.83x smaller than the model prescribes. With the factor removed the
+controller is at parity or slightly ahead on all four scenarios. See
+[ALGORITHMS.md](ALGORITHMS.md) section 1.
+
+**Read that as "no longer worse", not as "better".** Four of the eight intervals
+above overlap substantially, five seeds is few, and the largest gap
+(`heterogeneous`, +5.8%) rests on intervals that barely separate. What the data
+now supports is that the corrected controller costs nothing against a fixed 4 MB
+chunk on this workload; it does not establish that it beats one. The case the
+controller exists for -- a path where a good fixed size is not known in advance --
+is still untested, because one file size with one worker count cannot show it.
 
 ## Limitations
 
@@ -178,24 +192,47 @@ These bound what the numbers mean, and they are not minor.
    a shared bottleneck, extra connections divide one capacity and buy only
    latency hiding. Every speedup here is a speedup against a per-connection
    limit and must be reported as such.
-5. **Baselines are only partly run.** `benchmarks/run_baselines.py` compares
-   ReliaDL against aria2c, axel, curl and wget on identical conditions, and
-   reports missing tools as missing rather than omitting them. On the development
-   machine only `curl` is installed:
+5. **Baselines are partly run.** `benchmarks/run_baselines.py` compares ReliaDL
+   against aria2c, axel, curl and wget on identical conditions, and reports
+   missing tools as missing rather than omitting them. aria2c and curl are
+   installed; axel and wget are not, and their rows say so.
+
+   `--split` and `--min-split-size` are set explicitly in
+   `benchmarks/baselines.py`: aria2's `-x` alone does not open N connections, and
+   `--min-split-size` defaults to 20 MB, which silently caps the split on a 64 MB
+   file. Left at their defaults they would make aria2 look far worse than it is.
+
+   **On a clean path, aria2c is substantially faster than ReliaDL** (64 MB,
+   4 workers, 5 seeds):
 
    | Tool | Median | Goodput | |
    | :--- | ---: | ---: | :--- |
-   | ReliaDL | 1.39 s | 46.0 MB/s | 4 workers |
-   | curl | 3.02 s | 21.2 MB/s | single stream |
-   | aria2c, axel, wget | — | — | not installed |
+   | aria2c | 0.80 s | **79.8 MB/s** | parallel |
+   | ReliaDL | 1.26 s | 50.7 MB/s | parallel |
+   | curl | 2.68 s | 23.9 MB/s | single stream |
+   | axel, wget | — | — | not installed |
 
-   That is a 2.2x speedup over a single stream, which is the expected shape and
-   not a competitive claim. **aria2c is the direct competitor and its absence is
-   the largest gap in this evaluation.** When it is added, record the exact
-   invocation: aria2's `--split` governs how many connections it really opens and
-   `--min-split-size` (20 MB by default) silently caps the split on smaller
-   files, so the defaults make aria2 look far worse than it is. Both are set
-   explicitly in `benchmarks/baselines.py`.
+   aria2c is roughly 1.6x faster. That is the expected shape — aria2 is C++ and
+   ReliaDL is Python asyncio — and it is reported because the comparison was run,
+   not because it is flattering. **No claim in this project is that ReliaDL is
+   the fastest parallel downloader, and this result says it is not.**
+
+   **On a corrupting mirror the ordering reverses, and that is the point.** Same
+   payload and seeds, against a mirror silently corrupting one byte in 20% of
+   responses:
+
+   | Tool | Exited 0 | Delivered a file matching its SHA-256 |
+   | :--- | ---: | ---: |
+   | aria2c | 5/5 | **3/5** |
+   | ReliaDL (`baseline`, no manifest) | 1/5 | 1/5 |
+   | ReliaDL (`localization`, manifest) | 5/5 | 5/5 |
+
+   aria2c reported success on every run and handed back a full-size, silently
+   wrong 64 MB file on two of them. Nothing in its output distinguishes those two
+   runs from the other three. ReliaDL without a manifest detects the corruption
+   and refuses to deliver, which is why its exit status is 1 on four runs; with a
+   manifest it repairs and completes. This is the comparison the project exists
+   to make, and it is the one place where being 1.6x slower is the correct trade.
 6. **Five repetitions is few.** These are descriptive statistics. They report what
    was observed and how much it varied. They do not establish that one policy
    beats another, and must not be written up as though they do.
@@ -206,11 +243,20 @@ These bound what the numbers mean, and they are not minor.
 
 In rough order of how much each would add:
 
-1. Run the netem validation, and report the gap honestly whatever it is.
-2. Install aria2c and run `benchmarks/run_baselines.py`; curl alone is not a
-   competitive comparison.
-3. Sweep file size and worker count; the chunk-sizing result is a claim about a
-   tradeoff and a tradeoff needs a curve, not a point.
-4. Raise repetitions to 20+ and report confidence intervals.
-5. Run on a real network between two hosts, even a LAN, to check the loopback
+1. Run the netem validation, and report the gap honestly whatever it is. Still
+   outstanding: it needs Linux and root, and the development machine has no WSL
+   distribution installed. This is now the largest single gap.
+2. Sweep file size and worker count; the chunk-sizing result is a claim about a
+   tradeoff and a tradeoff needs a curve, not a point. This matters more since
+   the controller was corrected, because the question is no longer "why is it
+   worse" but "where, if anywhere, does it win".
+3. Raise repetitions to 20+ and report confidence intervals. Several of the
+   differences above sit inside overlapping interquartile ranges.
+4. Run on a real network between two hosts, even a LAN, to check the loopback
    conclusions survive a path with a non-trivial bandwidth-delay product.
+5. Install `axel` and `wget` to complete the baseline table.
+
+**Done since this list was written:** aria2c is installed and benchmarked, on a
+clean path and on a corrupting mirror (limitation 5 above). The concurrency-floor
+A/B, previously hard-coded into the figure script, is now a committed script that
+reproduces it.

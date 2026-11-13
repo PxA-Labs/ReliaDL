@@ -215,10 +215,22 @@ def fig_cost_model(out):
 
 # ---------------------------------------------------------------- Fig 5
 def fig_floor(out):
-    """Measured effect of the constraint, from the interleaved A/B in Section VI-E."""
+    """
+    Measured effect of the constraint, from the interleaved A/B in Section VI-E.
+
+    These are not read from results.jsonl, because the matrix has no
+    floor-disabled arm: the comparison needs the floor switched off inside the
+    scheduler, which `benchmarks/ablations/concurrency_floor.py` does by
+    replacing `_apply_concurrency_floor` for one arm. Regenerate with::
+
+        python -m benchmarks.ablations.concurrency_floor --repetitions 5
+
+    and update the two lists below. Values recorded 2026-11-14, 5 seeds per arm,
+    64 MB payload, 4 workers, against the corrected BL-DCS loss term.
+    """
     scenarios = ["clean", "heterog.", "failover", "lossy"]
-    off = [28.8, 28.7, 3.6, 43.9]
-    on = [52.1, 53.9, 8.9, 46.1]
+    off = [28.3, 25.1, 3.6, 46.2]
+    on = [46.6, 45.3, 8.9, 47.9]
     x = np.arange(len(scenarios))
     w = 0.36
     fig, ax = plt.subplots(figsize=(COL, 1.85))

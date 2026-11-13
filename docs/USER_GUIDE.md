@@ -35,7 +35,7 @@ pip install .
 ### Verify Installation
 
 ```bash
-ReliaDL --version
+reliadl --version
 # ReliaDL v1.0.0
 ```
 
@@ -46,13 +46,13 @@ ReliaDL --version
 ### 3.1 Download a File
 
 ```bash
-ReliaDL download "https://example.com/largefile.iso" "./largefile.iso"
+reliadl download --url "https://example.com/largefile.iso" --output "./largefile.iso"
 ```
 
 You'll see a progress display:
 
 ```
-ReliaDL v1.0.0 — Downloading largefile.iso
+reliadl 0.3.0 — Downloading largefile.iso
 
   ████████████████████░░░░░░░░░░  68.2%
 
@@ -66,10 +66,10 @@ ReliaDL v1.0.0 — Downloading largefile.iso
 If you know the file's SHA-256 hash (often provided by the download page), include it for guaranteed integrity:
 
 ```bash
-ReliaDL download \
-  --hash "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" \
-  "https://example.com/largefile.iso" \
-  "./largefile.iso"
+reliadl download \
+  --url "https://example.com/largefile.iso" \
+  --output "./largefile.iso" \
+  --expected-hash "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 ```
 
 When the download finishes, ReliaDL will verify the entire file matches the expected hash.
@@ -79,7 +79,7 @@ When the download finishes, ReliaDL will verify the entire file matches the expe
 If your download is interrupted (power outage, network drop, you close the terminal), just resume it:
 
 ```bash
-ReliaDL resume "./.ReliaDL/largefile.iso.state"
+reliadl resume --state-file "./.reliadl/largefile.iso.state"
 ```
 
 ReliaDL will:
@@ -93,7 +93,7 @@ ReliaDL will:
 Already have a file and want to check if it's intact?
 
 ```bash
-ReliaDL verify "./largefile.iso" "e3b0c44298fc1c149afbf4c8996fb924..."
+reliadl verify --file "./largefile.iso" --expected-hash "e3b0c44298fc1c149afbf4c8996fb924..."
 ```
 
 Output:
@@ -121,7 +121,7 @@ Or if it's corrupted:
 By default, ReliaDL uses 4 parallel connections. For faster servers:
 
 ```bash
-ReliaDL download --workers 8 "https://example.com/file.iso" "./file.iso"
+reliadl download --workers 8 --url "https://example.com/file.iso" --output "./file.iso"
 ```
 
 ### 4.2 Custom Chunk Size
@@ -129,26 +129,43 @@ ReliaDL download --workers 8 "https://example.com/file.iso" "./file.iso"
 The default chunk size is 8 MB. For very large files, larger chunks reduce overhead:
 
 ```bash
-ReliaDL download --chunk-size 32MB "https://example.com/huge.tar" "./huge.tar"
+reliadl download --chunk-size 32MB --url "https://example.com/huge.tar" --output "./huge.tar"
 ```
 
 ### 4.3 Custom Headers (Authentication)
 
 For servers that require authentication:
 
+**Custom request headers are not supported.** There is no `--header` flag and no
+configuration key for arbitrary headers; an earlier revision of this guide showed
+one. Only the User-Agent can be set:
+
 ```bash
-ReliaDL download \
-  --header "Authorization:Bearer YOUR_TOKEN_HERE" \
-  "https://private.example.com/file.zip" \
-  "./file.zip"
+export RELIADL_USER_AGENT="my-agent/1.0"
+reliadl download --url "https://private.example.com/file.zip" --output "./file.zip"
 ```
+
+For bearer-token or signed-URL sources, use a pre-signed URL, or the S3/GCS/Azure
+adapters described in [CLOUD_ADAPTERS.md](CLOUD_ADAPTERS.md), which sign their own
+requests.
 
 ### 4.4 Skip Final Verification
 
 If you don't have an expected hash and want to skip the final whole-file verification:
 
+There is no `--no-verify` flag. Whole-file verification is a configuration
+setting:
+
 ```bash
-ReliaDL download --no-verify "https://example.com/file.iso" "./file.iso"
+RELIADL_NO_VERIFY=1 reliadl download \
+  --url "https://example.com/file.iso" --output "./file.iso"
+```
+
+or in YAML:
+
+```yaml
+download:
+  verify_on_complete: false
 ```
 
 > **Note**: Per-chunk verification still runs — only the final whole-file hash check is skipped.
@@ -158,7 +175,7 @@ ReliaDL download --no-verify "https://example.com/file.iso" "./file.iso"
 View the progress of a download from its state file:
 
 ```bash
-ReliaDL status "./.ReliaDL/largefile.iso.state"
+reliadl inspect-state --state-file "./.reliadl/largefile.iso.state"
 ```
 
 ```
@@ -194,26 +211,38 @@ ReliaDL automatically uses `./ReliaDL.yaml` if it exists.
 To prevent consuming all available bandwidth on shared networks:
 
 ```bash
-chunkguard download --limit-rate 10MB "https://example.com/largefile.iso" "./largefile.iso"
+reliadl download --limit-rate 10MB --url "https://example.com/largefile.iso" --output "./largefile.iso"
 ```
 
 ### 4.8 Corporate Proxy & Custom CA Certificates
 
 Route traffic through an HTTP or SOCKS5 proxy:
 
+There is no `--proxy` flag; the proxy is configured, not passed per invocation.
+
 ```bash
-chunkguard download \
-  --proxy "http://proxy.corp.internal:8080" \
-  --header "Proxy-Authorization:Basic dXNlcjpwYXNz" \
-  "https://example.com/build.iso" "./build.iso"
+export RELIADL_NETWORK__PROXY__HTTPS_PROXY="http://proxy.corp.internal:8080"
+reliadl download --url "https://example.com/build.iso" --output "./build.iso"
 ```
+
+or in YAML:
+
+```yaml
+network:
+  proxy:
+    https_proxy: "http://proxy.corp.internal:8080"
+```
+
+SOCKS5 is supported via `socks_proxy`. Proxy credentials go in the URL
+(`http://user:pass@host:port`); there is no separate header option.
 
 ### 4.9 Direct Sparse Write Mode (Save Disk Space)
 
 If you have limited disk space and want to eliminate temporary chunk files:
 
 ```bash
-chunkguard download --direct-write "https://example.com/huge.iso" "./huge.iso"
+RELIADL_DOWNLOAD__DIRECT_WRITE=true reliadl download \
+  --url "https://example.com/huge.iso" --output "./huge.iso"
 ```
 
 This allocates the exact file size immediately and writes chunks directly to disk positions without requiring temporary chunk files.
@@ -222,11 +251,29 @@ This allocates the exact file size immediately and writes chunks directly to dis
 
 Download artifacts with guaranteed pre-authenticated chunk hashes:
 
+Build the manifest once, sign it, then drive the download from it. The manifest
+supplies per-chunk and per-64 KB sub-block digests, so a corrupt chunk is
+abandoned at the first bad block and only the remainder is re-requested.
+
 ```bash
-chunkguard download \
-  --manifest "./release.cgmanifest" \
-  --output "./ubuntu-server.iso"
+# Publisher side
+reliadl manifest generate --file ./ubuntu-server.iso --chunk-size 16MB
+reliadl manifest keygen --output ~/.reliadl/release.pem
+reliadl manifest sign \
+  --manifest ./ubuntu-server.iso.cgmanifest \
+  --key ~/.reliadl/release.pem --key-id release-2026
+
+# Consumer side
+reliadl manifest verify \
+  --manifest ./release.cgmanifest --public-key ./release.pem.pub
+reliadl download \
+  --url "https://cdn.example.com/ubuntu-server.iso" \
+  --output "./ubuntu-server.iso" \
+  --manifest "./release.cgmanifest"
 ```
+
+The manifest fixes the chunk boundaries, so `--adaptive-chunks` has no effect
+when one is supplied.
 
 ---
 
@@ -269,14 +316,14 @@ After successful download, the `.ReliaDL` directory is cleaned up automatically.
 
 Just run `resume`:
 ```bash
-ReliaDL resume "./.ReliaDL/filename.state"
+reliadl resume --state-file "./.reliadl/filename.state"
 ```
 
 ### "How do I know if my download is intact?"
 
 Use `verify`:
 ```bash
-ReliaDL verify "./file.iso" "EXPECTED_SHA256_HASH"
+reliadl verify --file "./file.iso" --expected-hash "EXPECTED_SHA256_HASH"
 ```
 
 ### "It keeps retrying the same chunk and failing"
@@ -290,7 +337,7 @@ The server might be having issues. You can:
 
 Try more parallel workers:
 ```bash
-ReliaDL download --workers 8 URL OUTPUT
+reliadl download --workers 8 --url URL --output OUTPUT
 ```
 
 Or check if your network is the bottleneck (run a speed test).
@@ -327,12 +374,12 @@ network:
 
 ```bash
 # General help
-ReliaDL --help
+reliadl --help
 
 # Command-specific help
-ReliaDL download --help
-ReliaDL resume --help
-ReliaDL verify --help
-ReliaDL status --help
+reliadl download --help
+reliadl resume --help
+reliadl verify --help
+reliadl inspect-state --help
 ```
 

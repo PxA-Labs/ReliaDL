@@ -94,12 +94,14 @@ within one process so that drift in machine load fell on both equally:
 
 | Scenario | Floor off | Floor on | |
 | :--- | ---: | ---: | :--- |
-| clean | 28.8 MB/s | 52.1 MB/s | +81% |
-| heterogeneous | 28.7 MB/s | 53.9 MB/s | +88% |
-| failover | 3.6 MB/s | 8.9 MB/s | +146% |
-| lossy | 43.9 MB/s | 46.1 MB/s | +5% |
+| clean | 28.3 MB/s | 46.6 MB/s | +65% |
+| heterogeneous | 25.1 MB/s | 45.3 MB/s | +80% |
+| failover | 3.6 MB/s | 8.9 MB/s | +145% |
+| lossy | 46.2 MB/s | 47.9 MB/s | +4% |
 
-Unconstrained, the controller was around 45% *slower* than a fixed 4 MB chunk
+Reproduce with `python -m benchmarks.ablations.concurrency_floor --repetitions 5`.
+
+Unconstrained, the controller was around 40% *slower* than a fixed 4 MB chunk
 size, and on `failover` a single 32 MB chunk landing on the degraded mirror stalls
 everything queued behind it.
 
@@ -122,12 +124,14 @@ downloader unless constrained by the worker count, and showing the size of the
 error, is not something the chunk-sizing literature appears to cover.
 
 It should be read for exactly what it is, though. The floor repairs a large
-regression; it does not make adaptive sizing a win. Against a fixed 4 MB chunk the
-constrained controller reaches parity on a clean path, is better on `failover`,
-and is modestly worse on `lossy` and `heterogeneous` -- 4 MB simply happens to
-suit this workload. The controller would have to earn its place on paths where a
-good fixed size is not known ahead of time, and a single file size with a single
-worker count cannot demonstrate that. See [EVALUATION.md](EVALUATION.md).
+regression; it does not by itself make adaptive sizing a win. Against a fixed
+4 MB chunk the constrained controller now reaches parity or slightly better on
+all four scenarios (-0.5% to +5.8%), but several of those comparisons sit inside
+overlapping interquartile ranges over five seeds, so the supportable claim is
+"costs nothing here", not "beats a constant". The controller would have to earn
+its place on paths where a good fixed size is not known ahead of time, and a
+single file size with a single worker count cannot demonstrate that. See
+[EVALUATION.md](EVALUATION.md).
 
 ### Open issues — do not cite this controller until these are resolved
 
