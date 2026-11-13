@@ -4,7 +4,10 @@ on:
   pull_request:
     branches:
       - master
-    types: [opened, edited, synchronized, reopened]
+    # 'synchronize' is the GitHub event name; 'synchronized' is not one and is
+    # silently ignored, so pushing new commits to an open PR never re-ran this
+    # check. A title fixed at review time stayed green no matter what landed after.
+    types: [opened, edited, synchronize, reopened]
 
 permissions:
   contents: read
