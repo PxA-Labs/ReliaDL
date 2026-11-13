@@ -34,11 +34,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Evaluation results from 115 seeded runs
 - Correct stale claims and repair find-and-replace damage
 - Bring the paper and the jury dossier onto the re-measured numbers
+- Bring the paper and dossier onto 30 seeds and interleaved pairing
 
 ### Maintenance & Dependencies
 - **deps**: Update mkdocs-material requirement from >=9.5.0 to >=9.7.7
 - **deps**: Bump actions/attest-build-provenance from 2 to 4
 - Re-measure against the corrected controller, and add aria2c
+- Raise to 30 seeds, and fix a confound that invalidated goodput comparisons
+- Inject corruption on whole-file GETs, and re-baseline at 30 reps
+- Fix the pull_request trigger so PR checks re-run on new commits
 
 ### Changed
 - **v0.3.0**: Update documentation for v0.3.0 release and standardize formatting (#106)
