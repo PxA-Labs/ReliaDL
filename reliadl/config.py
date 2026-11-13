@@ -428,6 +428,10 @@ def get_download_config(
         "adaptive_chunk_sizing": download_sec.get("adaptive_chunk_sizing", False),
         "adaptive_mirror_routing": download_sec.get("adaptive_mirror_routing", False),
         "mirrors": list(download_sec.get("mirrors", []) or []),
+        # Without this the field exists on the model but nothing populates it, so
+        # a manifest named in YAML or on the command line was silently ignored and
+        # sub-block localization stayed unreachable outside the Python API.
+        "manifest_path": download_sec.get("manifest_path"),
         "cleanup_chunks_on_complete": download_sec.get("cleanup_chunks_on_complete", True),
         "pre_check_disk_space": download_sec.get("pre_check_disk_space", True),
         "direct_write": download_sec.get("direct_write", False),
