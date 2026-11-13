@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reproducible benchmark harness, and two engine bugs it found
 - Concurrency-constrained chunk sizing, and real CI gates
 - Baseline comparison harness, and the pacing bug it exposed
+- **cli**: Make sub-block localization reachable from the command line
 
 ### Bug Fixes
 - **packaging**: Sync Dockerfile, reliadl.spec, and mkdocs.yml with master and reliadl package structure
@@ -24,16 +25,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reconcile documentation with implementation, wire algorithms into the engine
 - Scope the PR placeholder check to our own source
 - Pin mypy to platform = linux so the check is deterministic
+- **bldcs**: Remove the bits/bytes factor of 8 from the loss term
 
 ### Documentation
 - **release**: Add dedicated release log file and release log generator script
 - **agents**: Enforce archittmittal-only GitHub account rule
 - Correct dependency claims; surface silently swallowed state errors
 - Evaluation results from 115 seeded runs
+- Correct stale claims and repair find-and-replace damage
+- Bring the paper and the jury dossier onto the re-measured numbers
 
 ### Maintenance & Dependencies
 - **deps**: Update mkdocs-material requirement from >=9.5.0 to >=9.7.7
 - **deps**: Bump actions/attest-build-provenance from 2 to 4
+- Re-measure against the corrected controller, and add aria2c
 
 ### Changed
 - **v0.3.0**: Update documentation for v0.3.0 release and standardize formatting (#106)
