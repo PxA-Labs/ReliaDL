@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 import platform
@@ -17,16 +18,32 @@ import sys
 import time
 import urllib.request
 import urllib.error
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional, Sequence
 
 from reliadl.adapters.proxy_adapter import ProxyConfig, ProxyTunnel
-from reliadl.config import format_size, get_download_config
+from reliadl.config import format_size, get_download_config, parse_size
 from reliadl.download_engine import DownloadEngine
 from reliadl.exceptions import DownloadCancelledError, ReliaDLError
 from reliadl.hash_verifier import StreamingHashVerifier, compute_file_hash, constant_time_compare
 from reliadl.logger import configure_logger, get_logger
-from reliadl.manifest import BinaryMerkleTree, compute_merkle_root, load_manifest
+from reliadl.manifest import (
+    DEFAULT_SUB_BLOCK_SIZE,
+    ArtifactMetadata,
+    BinaryMerkleTree,
+    ChunkingTopology,
+    ChunkManifest,
+    ManifestChunk,
+    ManifestGenerator,
+    MirrorSpec,
+    calculate_sub_blocks,
+    compute_merkle_root,
+    generate_ed25519_keypair,
+    load_manifest,
+    private_key_to_pem,
+    public_key_to_pem,
+)
 from reliadl.models import DownloadConfig, DownloadResult, ProgressReport
 from reliadl.state_manager import StateManager
 
@@ -303,6 +320,244 @@ def run_inspect_state(args: argparse.Namespace) -> int:
 # 4. Doctor Command Implementation
 # ─────────────────────────────────────────────────────────────────────────────
 
+def run_manifest(args: argparse.Namespace) -> int:
+    """Dispatch a `reliadl manifest <action>` subcommand."""
+    actions = {
+        "generate": _manifest_generate,
+        "sign": _manifest_sign,
+        "verify": _manifest_verify,
+        "keygen": _manifest_keygen,
+    }
+    action = actions.get(getattr(args, "manifest_action", None) or "")
+    if action is None:
+        print("[ERROR] Specify one of: generate, sign, verify, keygen")
+        return 1
+    return action(args)
+
+
+def _manifest_generate(args: argparse.Namespace) -> int:
+    """
+    Build a .cgmanifest for a local file.
+
+    Chunk boundaries are fixed here and the engine adopts them verbatim, which is
+    what makes a manifest and --adaptive-chunks mutually exclusive: the digests
+    below are computed over these specific ranges.
+    """
+    source = Path(args.file)
+    if not source.is_file():
+        print(f"[ERROR] Not a file: {source}")
+        return 1
+
+    try:
+        chunk_size = parse_size(args.chunk_size) if args.chunk_size else 8 * 1024 * 1024
+        sub_block_size = (
+            parse_size(args.sub_block_size) if args.sub_block_size else DEFAULT_SUB_BLOCK_SIZE
+        )
+    except (ValueError, ReliaDLError) as err:
+        print(f"[ERROR] {err}")
+        return 1
+    if chunk_size < 1:
+        print("[ERROR] --chunk-size must be positive")
+        return 1
+    if sub_block_size < 1 or sub_block_size > chunk_size:
+        print("[ERROR] --sub-block-size must be positive and no larger than --chunk-size")
+        return 1
+
+    total = source.stat().st_size
+    if total == 0:
+        print("[ERROR] Refusing to build a manifest for an empty file")
+        return 1
+
+    want_sub_blocks = not args.no_sub_blocks
+    whole = hashlib.sha256()
+    chunks: list[ManifestChunk] = []
+
+    # Streamed a chunk at a time: a manifest is routinely built for a file far
+    # larger than memory, so the payload is never held whole.
+    with source.open("rb") as handle:
+        index = 0
+        start = 0
+        while start < total:
+            data = handle.read(chunk_size)
+            if not data:
+                break
+            whole.update(data)
+            chunks.append(
+                ManifestChunk(
+                    index=index,
+                    start_byte=start,
+                    end_byte=start + len(data) - 1,
+                    size_bytes=len(data),
+                    sha256=hashlib.sha256(data).hexdigest(),
+                    sub_blocks=(
+                        calculate_sub_blocks(data, sub_block_size) if want_sub_blocks else None
+                    ),
+                )
+            )
+            index += 1
+            start += len(data)
+
+    manifest = ChunkManifest(
+        generator=ManifestGenerator(
+            name="reliadl",
+            version=__version__,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+        ),
+        artifact_metadata=ArtifactMetadata(
+            filename=source.name,
+            file_size_bytes=total,
+            file_hash_sha256=whole.hexdigest(),
+        ),
+        mirrors=[MirrorSpec(url=u) for u in (args.mirror or [])],
+        chunking_topology=ChunkingTopology(
+            default_chunk_size_bytes=chunk_size,
+            total_chunks=len(chunks),
+            hash_algorithm="sha256",
+            merkle_tree_root=compute_merkle_root([c.sha256 for c in chunks]),
+        ),
+        chunks=chunks,
+    )
+
+    target = Path(args.output) if args.output else source.with_suffix(source.suffix + ".cgmanifest")
+    manifest.save(target)
+    print(f"Wrote     : {target}")
+    print(f"File      : {source.name} ({format_size(total)})")
+    print(f"SHA-256   : {manifest.artifact_metadata.file_hash_sha256}")
+    print(f"Chunks    : {len(chunks)} x {format_size(chunk_size)}")
+    print(
+        "Sub-blocks: "
+        + (f"{format_size(sub_block_size)} per chunk" if want_sub_blocks else "none (no localized repair)")
+    )
+    print(f"Merkle    : {manifest.chunking_topology.merkle_tree_root}")
+    if not want_sub_blocks:
+        print(
+            "[WARN] Without sub-block digests a corrupt chunk is re-fetched whole; "
+            "localized repair needs them."
+        )
+    return 0
+
+
+def _manifest_keygen(args: argparse.Namespace) -> int:
+    """Write a fresh Ed25519 keypair for signing manifests."""
+    private_key, public_key = generate_ed25519_keypair()
+    priv_path = Path(args.output)
+    pub_path = priv_path.with_suffix(priv_path.suffix + ".pub")
+    priv_path.write_text(private_key_to_pem(private_key), encoding="utf-8")
+    pub_path.write_text(public_key_to_pem(public_key), encoding="utf-8")
+    try:
+        os.chmod(priv_path, 0o600)
+    except OSError as err:  # Windows and some filesystems do not honour the mode.
+        logger.debug("manifest.keygen.chmod_failed", path=str(priv_path), error=str(err))
+        print(f"[WARN] Could not restrict permissions on {priv_path}: {err}")
+    print(f"Private key: {priv_path}")
+    print(f"Public key : {pub_path}")
+    return 0
+
+
+def _manifest_sign(args: argparse.Namespace) -> int:
+    """Sign an existing manifest in place with an Ed25519 private key."""
+    manifest_path = Path(args.manifest)
+    key_path = Path(args.key)
+    if not manifest_path.is_file():
+        print(f"[ERROR] Manifest not found: {manifest_path}")
+        return 1
+    if not key_path.is_file():
+        print(f"[ERROR] Private key not found: {key_path}")
+        return 1
+    try:
+        manifest = load_manifest(manifest_path)
+        signed = manifest.sign(
+            key_path.read_text(encoding="utf-8"),
+            key_id=args.key_id,
+            algorithm=args.algorithm,
+        )
+        signed.save(manifest_path)
+    except ReliaDLError as err:
+        print(f"[ERROR] {err}")
+        return 1
+    print(f"Signed    : {manifest_path}")
+    print(f"Key ID    : {args.key_id}")
+    print(f"Algorithm : {args.algorithm}")
+    return 0
+
+
+def _manifest_verify(args: argparse.Namespace) -> int:
+    """
+    Check a manifest's internal consistency, and its signature when one is present.
+
+    Three independent checks, reported separately, because they fail for
+    different reasons: the Merkle root covers the chunk list, the signature
+    covers the whole canonicalized document, and --file re-hashes the artifact
+    against what the manifest claims.
+    """
+    manifest_path = Path(args.manifest)
+    if not manifest_path.is_file():
+        print(f"[ERROR] Manifest not found: {manifest_path}")
+        return 1
+    try:
+        manifest = load_manifest(manifest_path)
+    except ReliaDLError as err:
+        print(f"[ERROR] {err}")
+        return 1
+
+    failures = 0
+
+    # verify_merkle_root raises on mismatch rather than returning False, and a
+    # mismatch is exactly what this command exists to report, so the exception is
+    # a result here and not an error path.
+    try:
+        ok_root = manifest.verify_merkle_root()
+    except ReliaDLError as err:
+        ok_root = False
+        root_detail = str(err)
+    else:
+        root_detail = "chunk list does not reproduce the recorded root"
+    if ok_root:
+        print("Merkle root  : OK")
+    else:
+        print(f"Merkle root  : FAILED - {root_detail}")
+        failures += 1
+
+    if manifest.is_signed:
+        key = Path(args.public_key).read_text(encoding="utf-8") if args.public_key else None
+        try:
+            ok = manifest.verify_signature(key)
+        except ReliaDLError as err:
+            print(f"Signature    : FAILED - {err}")
+            failures += 1
+        else:
+            if ok:
+                # A manifest that carries its own key proves integrity, not
+                # provenance: anyone can re-sign a document with a key they made.
+                print(
+                    "Signature    : OK"
+                    + ("" if args.public_key else "  [self-described key - provenance unverified]")
+                )
+            else:
+                print("Signature    : FAILED - signature does not match the document")
+                failures += 1
+    else:
+        print("Signature    : absent (unsigned manifest)")
+
+    if args.file:
+        artifact = Path(args.file)
+        if not artifact.is_file():
+            print(f"Artifact     : FAILED - not a file: {artifact}")
+            failures += 1
+        else:
+            digest = compute_file_hash(artifact, algorithm="sha256")
+            if constant_time_compare(digest, manifest.artifact_metadata.file_hash_sha256):
+                print("Artifact     : OK")
+            else:
+                print("Artifact     : FAILED - file hash does not match the manifest")
+                failures += 1
+
+    has_sub_blocks = any(c.sub_blocks for c in manifest.chunks)
+    print(f"Chunks       : {len(manifest.chunks)}")
+    print(f"Sub-blocks   : {'present' if has_sub_blocks else 'absent (no localized repair)'}")
+    return 1 if failures else 0
+
+
 def run_doctor(args: argparse.Namespace) -> int:
     """
     Audits the local execution environment, Python runtime, operating system capabilities,
@@ -517,6 +772,10 @@ def _engine_config(args: argparse.Namespace) -> DownloadConfig:
         # than silently recording URLs the engine would never consult.
         download["mirrors"] = list(args.mirror)
         download["adaptive_mirror_routing"] = True
+    if getattr(args, "manifest", None) is not None:
+        # The manifest supplies the chunk partition and, when it carries
+        # sub_blocks, the per-64 KB digests that make localized repair possible.
+        download["manifest_path"] = str(args.manifest)
     return get_download_config(
         config_path=getattr(args, "config", None),
         overrides={"download": download, "network": network},
@@ -689,7 +948,58 @@ def build_parser() -> argparse.ArgumentParser:
         help="Additional URL serving the same payload; repeatable. Implies --adaptive-mirrors",
     )
     p_dl.add_argument("--expected-hash", "--sha256", dest="expected_hash", help="Expected SHA-256 of the whole file")
+    p_dl.add_argument(
+        "--manifest",
+        metavar="PATH",
+        help=(
+            "Signed .cgmanifest describing the chunk partition. When it carries "
+            "per-sub-block digests, a corrupt chunk is abandoned at the first bad "
+            "64 KB block and only the remainder is re-fetched. Adopting the "
+            "manifest's partition disables --adaptive-chunks."
+        ),
+    )
     _add_engine_arguments(p_dl)
+
+    # Manifests: build, sign and check the catalog that makes localized repair
+    # possible. Without one the engine can only verify the whole file at the end.
+    p_man = subparsers.add_parser(
+        "manifest", help="Generate, sign and verify .cgmanifest catalogs"
+    )
+    man_sub = p_man.add_subparsers(dest="manifest_action", help="Manifest operation")
+
+    p_man_gen = man_sub.add_parser("generate", help="Build a .cgmanifest for a local file")
+    p_man_gen.add_argument("--file", required=True, help="Artifact to describe")
+    p_man_gen.add_argument("--output", "-o", help="Manifest path (default: <file>.cgmanifest)")
+    p_man_gen.add_argument("--chunk-size", help="Chunk size, e.g. 8MB (default 8MB)")
+    p_man_gen.add_argument(
+        "--sub-block-size", help="Sub-block size for localized repair, e.g. 64KB (default 64KB)"
+    )
+    p_man_gen.add_argument(
+        "--no-sub-blocks",
+        action="store_true",
+        help="Omit per-sub-block digests. Disables localized repair",
+    )
+    p_man_gen.add_argument(
+        "--mirror", action="append", metavar="URL", help="Mirror serving this artifact; repeatable"
+    )
+
+    p_man_key = man_sub.add_parser("keygen", help="Generate an Ed25519 signing keypair")
+    p_man_key.add_argument("--output", "-o", required=True, help="Private key path (.pem)")
+
+    p_man_sign = man_sub.add_parser("sign", help="Sign a manifest in place")
+    p_man_sign.add_argument("--manifest", required=True, help="Manifest to sign")
+    p_man_sign.add_argument("--key", required=True, help="Private key PEM")
+    p_man_sign.add_argument("--key-id", required=True, help="Identifier recorded in the signature")
+    p_man_sign.add_argument(
+        "--algorithm", default="ed25519", choices=["ed25519", "rsa-pss"], help="Signature algorithm"
+    )
+
+    p_man_ver = man_sub.add_parser("verify", help="Verify a manifest's root, signature and artifact")
+    p_man_ver.add_argument("--manifest", required=True, help="Manifest to verify")
+    p_man_ver.add_argument(
+        "--public-key", help="Trusted public key PEM. Without it, provenance is unverified"
+    )
+    p_man_ver.add_argument("--file", help="Also re-hash this artifact against the manifest")
 
     # Core: resume
     p_res = subparsers.add_parser("resume", help="Resume interrupted transfer session")
@@ -754,6 +1064,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "benchmark": run_benchmark,
         "probe": run_probe,
         "inspect-state": run_inspect_state,
+        "manifest": run_manifest,
         "doctor": run_doctor,
         "top": run_top,
         "hash-tree": run_hash_tree,

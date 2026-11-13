@@ -7,10 +7,12 @@ cold-start fallback, and configuration validation.
 
 from __future__ import annotations
 
+import math
 import unittest
 
 from reliadl.algorithms.adaptive_chunker import (
     DEFAULT_CHUNK_SIZE,
+    DEFAULT_EPSILON,
     DEFAULT_MSS_BYTES,
     MAX_CHUNK_SIZE,
     MIN_CHUNK_SIZE,
@@ -398,6 +400,59 @@ class TestConfigurationValidation(unittest.TestCase):
             with self.subTest(**kwargs):
                 with self.assertRaises(ConfigurationError):
                     BLDCSController(**kwargs)  # type: ignore[arg-type]
+
+
+class TestClosedForm(unittest.TestCase):
+    """
+    The loss term must equal the closed form the module docstring derives.
+
+    Minimizing the per-byte cost tau*mu/S + p_seg*S/MSS over S gives
+    S* = sqrt(tau * mu * MSS / p_seg), with no further coefficient. The
+    implementation once carried an extra factor of 8 in the denominator -- the
+    conversion appropriate to a bit rate, applied to a throughput that is
+    already bytes per second -- which made every loss-driven chunk sqrt(8)
+    times too small. These tests pin the algebra so that cannot recur silently.
+    """
+
+    def test_loss_term_matches_closed_form(self) -> None:
+        controller = BLDCSController(align_power_of_two=False)
+        for drop, observed in ((0.05, 8 * MB), (0.15, 4 * MB), (0.3, 2 * MB)):
+            with self.subTest(drop=drop, observed=observed):
+                state = snapshot(drop=drop, observed_bytes=observed)
+                decision = controller.decide(state)
+                p_seg = decision.segment_drop
+                # epsilon guards division by zero and is part of the implemented
+                # expression, so it belongs in the expectation. It sits about
+                # four orders of magnitude below p_seg here, which is why the
+                # looser check below still pins the factor-of-8 regression:
+                # sqrt(8) is 2.83x, not 1.0001x.
+                expected = math.sqrt(
+                    (0.025 * state.throughput_bps * DEFAULT_MSS_BYTES)
+                    / (p_seg + DEFAULT_EPSILON)
+                )
+                self.assertAlmostEqual(
+                    decision.loss_term / expected, 1.0, places=9
+                )
+                # And the epsilon-free form is still within 0.1%, so no
+                # coefficient of any consequence can hide inside it.
+                bare = math.sqrt(
+                    (0.025 * state.throughput_bps * DEFAULT_MSS_BYTES) / p_seg
+                )
+                self.assertLess(abs(decision.loss_term / bare - 1.0), 1e-3)
+
+    def test_no_bit_to_byte_rescaling_of_throughput(self) -> None:
+        """
+        Doubling throughput must scale the loss term by exactly sqrt(2).
+
+        A stray constant inside the radicand would survive this test, but a
+        stray factor applied to mu itself would not.
+        """
+        controller = BLDCSController(align_power_of_two=False)
+        slow = controller.decide(snapshot(throughput_mbps=10.0, drop=0.1))
+        fast = controller.decide(snapshot(throughput_mbps=20.0, drop=0.1))
+        self.assertAlmostEqual(
+            fast.loss_term / slow.loss_term, math.sqrt(2.0), places=6
+        )
 
 
 class TestDecisionRecord(unittest.TestCase):

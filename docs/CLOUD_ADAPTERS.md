@@ -1,6 +1,6 @@
-# cloud storage Storage & Protocol Adapters — ChunkGuard
+# Cloud Storage & Protocol Adapters — ReliaDL
 
-> **Audience**: cloud storage Architects, Systems Engineers, DevOps
+> **Audience**: Cloud Architects, Systems Engineers, DevOps
 > **Status**: Architecture & Protocol Specification
 > **Reading time**: ~15 minutes
 
@@ -8,11 +8,11 @@
 
 ## 1. Overview
 
-ChunkGuard is designed as a protocol-agnostic, fault-tolerant data transfer engine. While standard HTTP/1.1 and HTTP/2 Range requests serve as the default transport layer, ChunkGuard provides native protocol adapters for **cloud storage Object Stores (AWS S3, Google cloud storage Storage, Azure Blob Storage)**, **Enterprise Proxies (HTTP CONNECT & SOCKS5)**, and **Next-Generation HTTP/3 (QUIC)**.
+ReliaDL is designed as a protocol-agnostic, fault-tolerant data transfer engine. While standard HTTP/1.1 and HTTP/2 Range requests serve as the default transport layer, ReliaDL provides native protocol adapters for **Cloud Object Stores (AWS S3, Google Cloud Storage, Azure Blob Storage)**, **Enterprise Proxies (HTTP CONNECT & SOCKS5)**, and **Next-Generation HTTP/3 (QUIC)**.
 
 ```
                          ┌─────────────────────────────┐
-                         │   ChunkGuard Core Engine    │
+                         │   ReliaDL Core Engine    │
                          └──────────────┬──────────────┘
                                         │
                          ┌──────────────▼──────────────┐
@@ -83,7 +83,7 @@ The S3 adapter evaluates AWS credentials in standard precedence order:
 4. AWS IAM Instance Profile / ECS Task Role / EKS IRSA (IAM Roles for Service Accounts)
 
 ### 3.3 Protocol Execution & Range Requests
-S3 natively supports the HTTP `Range: bytes=start-end` header. ChunkGuard signs each individual chunk request with **AWS Signature Version 4 (SigV4)**:
+S3 natively supports the HTTP `Range: bytes=start-end` header. ReliaDL signs each individual chunk request with **AWS Signature Version 4 (SigV4)**:
 
 ```http
 GET /large-dataset.parquet HTTP/1.1
@@ -95,11 +95,11 @@ Authorization: AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20260824/us-east
 ```
 
 ### 3.4 S3 Express One Zone & Cross-Region Acceleration
-ChunkGuard automatically detects and leverages **S3 Transfer Acceleration** (`bucketname.s3-accelerate.amazonaws.com`) and low-latency **S3 Express One Zone** endpoints when configured.
+ReliaDL automatically detects and leverages **S3 Transfer Acceleration** (`bucketname.s3-accelerate.amazonaws.com`) and low-latency **S3 Express One Zone** endpoints when configured.
 
 ---
 
-## 4. Google cloud storage Storage (GCS) Adapter
+## 4. Google Cloud Storage (GCS) Adapter
 
 ### 4.1 Supported URI Formats
 * `gs://bucket-name/path/to/file.img`
@@ -111,7 +111,7 @@ ChunkGuard automatically detects and leverages **S3 Transfer Acceleration** (`bu
 * Workload Identity in Google Kubernetes Engine (GKE)
 
 ### 4.3 Range Request Implementation
-ChunkGuard uses OAuth2 Bearer tokens with GCS JSON/XML APIs and passes standard `Range: bytes=start-end` headers. For files with MD5 or CRC32C metadata, ChunkGuard maps and cross-validates checksums alongside SHA-256.
+ReliaDL uses OAuth2 Bearer tokens with GCS JSON/XML APIs and passes standard `Range: bytes=start-end` headers. For files with MD5 or CRC32C metadata, ReliaDL maps and cross-validates checksums alongside SHA-256.
 
 ---
 
@@ -136,7 +136,7 @@ Uses Azure Blob REST API version `2023-11-03` with `x-ms-range: bytes=start-end`
 In secure corporate networks, downloads must route through forward proxies with authentication and SSL inspection.
 
 ```
-ChunkGuard ──▶ [ HTTP CONNECT Tunnel ] ──▶ [ Corporate Proxy ] ──▶ Target Server
+ReliaDL ──▶ [ HTTP CONNECT Tunnel ] ──▶ [ Corporate Proxy ] ──▶ Target Server
                      or SOCKS5 Handshake           (Auth & Inspection)
 ```
 
@@ -169,9 +169,9 @@ chunkguard download \
 
 ## 7. HTTP/3 (QUIC) Transport
 
-ChunkGuard supports HTTP/3 (over QUIC/UDP) for environments with packet loss and high latency.
+ReliaDL supports HTTP/3 (over QUIC/UDP) for environments with packet loss and high latency.
 
-### 7.1 Benefits of HTTP/3 for ChunkGuard
+### 7.1 Benefits of HTTP/3 for ReliaDL
 * **Zero Head-of-Line Blocking**: In HTTP/2 (over TCP), a single lost packet stalls all multiplexed streams in the TCP window. In HTTP/3 (over QUIC), packet loss on chunk $A$ has zero impact on chunk $B$.
 * **0-RTT Connection Resumption**: Instant connection establishment for resumed transfers.
 * **Connection Migration**: Coroutine workers seamlessly continue chunk downloads when client IP/network changes (e.g. WiFi to cellular handoff).

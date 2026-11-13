@@ -12,15 +12,20 @@ this repository.
 
 | Status | Meaning |
 | :--- | :--- |
-| **Wired** | Called on the live download path in `reliadl/download_engine.py` |
+| **Wired** | Reachable from a live download, directly or through `reliadl/scheduling.py` |
 | **Library** | Implemented and unit-tested, but not yet reachable from a download |
+
+A **Wired** algorithm may still be opt-in. BL-DCS and EXP3.S are reached only when
+`--adaptive-chunks` / `--adaptive-mirrors` are given; they are marked Wired because an
+execution path exists, which is the distinction this table is for.
 | **Planned** | Not implemented. Listed only so its absence is unambiguous |
 
 ---
 
 ## 1. BL-DCS: Bandwidth-Loss Closed-Loop Dynamic Chunk Sizing
 
-**Status: Library** — `reliadl/algorithms/adaptive_chunker.py`
+**Status: Wired** (opt-in, `--adaptive-chunks`) — `reliadl/algorithms/adaptive_chunker.py`,
+reached via `reliadl/scheduling.py`
 
 **Provenance:** standard square-root cost tradeoff. Our contribution is the
 per-segment loss rescaling, not the formula.
@@ -89,12 +94,14 @@ within one process so that drift in machine load fell on both equally:
 
 | Scenario | Floor off | Floor on | |
 | :--- | ---: | ---: | :--- |
-| clean | 28.8 MB/s | 52.1 MB/s | +81% |
-| heterogeneous | 28.7 MB/s | 53.9 MB/s | +88% |
-| failover | 3.6 MB/s | 8.9 MB/s | +146% |
-| lossy | 43.9 MB/s | 46.1 MB/s | +5% |
+| clean | 28.3 MB/s | 46.6 MB/s | +65% |
+| heterogeneous | 25.1 MB/s | 45.3 MB/s | +80% |
+| failover | 3.6 MB/s | 8.9 MB/s | +145% |
+| lossy | 46.2 MB/s | 47.9 MB/s | +4% |
 
-Unconstrained, the controller was around 45% *slower* than a fixed 4 MB chunk
+Reproduce with `python -m benchmarks.ablations.concurrency_floor --repetitions 5`.
+
+Unconstrained, the controller was around 40% *slower* than a fixed 4 MB chunk
 size, and on `failover` a single 32 MB chunk landing on the degraded mirror stalls
 everything queued behind it.
 
@@ -117,22 +124,33 @@ downloader unless constrained by the worker count, and showing the size of the
 error, is not something the chunk-sizing literature appears to cover.
 
 It should be read for exactly what it is, though. The floor repairs a large
-regression; it does not make adaptive sizing a win. Against a fixed 4 MB chunk the
-constrained controller reaches parity on a clean path, is better on `failover`,
-and is modestly worse on `lossy` and `heterogeneous` -- 4 MB simply happens to
-suit this workload. The controller would have to earn its place on paths where a
-good fixed size is not known ahead of time, and a single file size with a single
-worker count cannot demonstrate that. See [EVALUATION.md](EVALUATION.md).
+regression; it does not by itself make adaptive sizing a win. Against a fixed
+4 MB chunk the constrained controller now reaches parity or slightly better on
+all four scenarios (-0.5% to +5.8%), but several of those comparisons sit inside
+overlapping interquartile ranges over five seeds, so the supportable claim is
+"costs nothing here", not "beats a constant". The controller would have to earn
+its place on paths where a good fixed size is not known ahead of time, and a
+single file size with a single worker count cannot demonstrate that. See
+[EVALUATION.md](EVALUATION.md).
 
 ### Open issues — do not cite this controller until these are resolved
 
 - `DEFAULT_GAMMA = 1.0` and `DEFAULT_LAMBDA = 1.0` (`:48`, `:51`) are the only free
   parameters of the formula and **both are unjustified placeholders**. Neither has been
   swept or fitted.
-- The factor `8.0` in the denominator at `:302` does not appear in the derivation above
-  and is unexplained; it may be a bits/bytes slip. It must be derived or removed.
 - `DEFAULT_OVERHEAD_SECONDS = 0.025` (`:54`) is described as "nominal" and has no
   measured source.
+
+**Resolved: the unexplained factor of 8.** An earlier revision of this document recorded
+a factor `8.0` in the radicand's denominator that did not appear in the derivation, and
+required it to be derived or removed. It was a bits-to-bytes conversion applied to a
+quantity already measured in bytes: `NetworkSample.throughput_bps` is
+`bytes_transferred / duration_seconds` (`metrics_collector.py`), so dividing by 8 a
+second time made every loss-driven chunk `sqrt(8)` ~ 2.83x smaller than the closed form
+prescribes. It is removed. The effect was nil on a clean path, where the loss term
+saturates the upper clamp either way, and large wherever loss actually drove the
+decision. `tests/unit/test_adaptive_chunker.py::TestClosedForm` now pins the loss term
+to `sqrt(tau * mu * MSS / p_seg)` so the coefficient cannot return unnoticed.
 
 There is **no convergence proof and no optimality bound** for this controller. It is a
 closed-form static optimum recomputed per decision epoch from a smoothed state
@@ -142,7 +160,8 @@ estimate, not an online learning algorithm with a regret guarantee.
 
 ## 2. EXP3.S Mirror Routing
 
-**Status: Library** — `reliadl/algorithms/mirror_bandit.py`
+**Status: Wired** (opt-in, `--adaptive-mirrors`) — `reliadl/algorithms/mirror_bandit.py`,
+reached via `reliadl/scheduling.py`
 
 **Provenance:** EXP3 and EXP3.S are Auer, Cesa-Bianchi, Freund and Schapire (2002).
 The implementation and the decay measurement are ours; the algorithm is not.

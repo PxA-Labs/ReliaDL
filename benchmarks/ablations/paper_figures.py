@@ -215,10 +215,27 @@ def fig_cost_model(out):
 
 # ---------------------------------------------------------------- Fig 5
 def fig_floor(out):
-    """Measured effect of the constraint, from the interleaved A/B in Section VI-E."""
+    """
+    Measured effect of the constraint, from the interleaved A/B in Section VI-E.
+
+    These are not read from results.jsonl, because the matrix has no
+    floor-disabled arm: the comparison needs the floor switched off inside the
+    scheduler, which `benchmarks/ablations/concurrency_floor.py` does by
+    replacing `_apply_concurrency_floor` for one arm. Regenerate with::
+
+        python -m benchmarks.ablations.concurrency_floor --repetitions 5
+
+    and update the two lists below. Values recorded 2026-11-14, 5 seeds per arm,
+    64 MB payload, 4 workers, against the corrected BL-DCS loss term.
+    """
     scenarios = ["clean", "heterog.", "failover", "lossy"]
-    off = [28.8, 28.7, 3.6, 43.9]
-    on = [52.1, 53.9, 8.9, 46.1]
+    off = [28.3, 25.1, 3.6, 46.2]
+    on = [46.6, 45.3, 8.9, 47.9]
+    # Carried rather than recomputed from the rounded bar labels. On failover the
+    # unrounded medians are 3.63 and 8.92, which is +145%; dividing the displayed
+    # 8.9 by the displayed 3.6 gives +147%, and a figure that disagrees with its
+    # own table by two points invites exactly the question it should not.
+    change = [64.6, 80.4, 145.4, 3.5]
     x = np.arange(len(scenarios))
     w = 0.36
     fig, ax = plt.subplots(figsize=(COL, 1.85))
@@ -226,10 +243,10 @@ def fig_floor(out):
            edgecolor=INK, linewidth=0.6, zorder=3)
     ax.bar(x + w / 2, on, w, label="with constraint (8)", facecolor="#595959",
            edgecolor=INK, linewidth=0.6, hatch="///", zorder=3)
-    for xi, a, b in zip(x, off, on, strict=True):
+    for xi, a, b, c in zip(x, off, on, change, strict=True):
         ax.text(xi - w / 2, a + 1.2, f"{a:.1f}", ha="center", fontsize=5.6)
         ax.text(xi + w / 2, b + 1.2, f"{b:.1f}", ha="center", fontsize=5.6)
-        ax.text(xi, max(a, b) + 6.0, f"+{(b / a - 1) * 100:.0f}%", ha="center",
+        ax.text(xi, max(a, b) + 6.0, f"+{c:.0f}%", ha="center",
                 fontsize=6.0, color=INK)
     ax.set_xticks(x)
     ax.set_xticklabels(scenarios)

@@ -54,7 +54,7 @@ docker run --rm \
 
 | Port | Protocol | Purpose |
 |---|---|---|
-| `9090` | TCP | Prometheus metrics scrape endpoint |
+| `9100` | TCP | Prometheus metrics scrape endpoint |
 
 ### Build Stages
 
@@ -75,20 +75,37 @@ runtime  →  python:3.12-alpine (clean)
 
 ## 4. Prometheus Metrics
 
-To scrape Prometheus metrics from inside the container, start your code with the metrics server enabled and expose port 9090:
+The metrics endpoint is served by `MetricsServer` from `reliadl.telemetry`, which
+listens on **9100** by default. There is no `reliadl metrics` subcommand; the
+server is started from the code that performs the transfer, so it is exposed by
+running your own entrypoint rather than the CLI:
+
+```python
+from reliadl.telemetry import DownloadMetrics, MetricsRegistry, MetricsServer
+
+registry = MetricsRegistry()
+metrics = DownloadMetrics(registry)
+server = MetricsServer(registry, host="0.0.0.0", port=9100)
+server.start()
+# ... run the transfer, then server.stop()
+```
+
+`host` defaults to `127.0.0.1`, which is not reachable from outside the
+container; bind `0.0.0.0` as above when publishing the port.
 
 ```bash
 docker run --rm \
-  -p 9090:9090 \
+  -p 9100:9100 \
   -v "$(pwd)/downloads:/downloads" \
+  -v "$(pwd)/app.py:/app/app.py" \
   ghcr.io/pxa-labs/reliadl:latest \
-  metrics --port 9090
+  python /app/app.py
 ```
 
 Verify:
 
 ```bash
-curl http://localhost:9090/metrics
+curl http://localhost:9100/metrics
 ```
 
 ---
@@ -103,7 +120,7 @@ services:
     image: ghcr.io/pxa-labs/reliadl:latest
     user: "1000:1000"
     ports:
-      - "9090:9090"        # Prometheus metrics
+      - "9100:9100"        # Prometheus metrics
     volumes:
       - ./downloads:/downloads
       - ./config.yaml:/etc/reliadl/config.yaml:ro
@@ -128,7 +145,7 @@ services:
 scrape_configs:
   - job_name: reliadl
     static_configs:
-      - targets: ['reliadl:9090']
+      - targets: ['reliadl:9100']
     scrape_interval: 15s
 ```
 
