@@ -27,8 +27,8 @@ pip install ReliaDL
 ### Option 2: From Source
 
 ```bash
-git clone https://github.com/PxA-Labs/ChunkGuard.git
-cd ChunkGuard
+git clone https://github.com/PxA-Labs/ReliaDL.git
+cd ReliaDL
 pip install .
 ```
 

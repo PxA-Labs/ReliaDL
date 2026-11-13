@@ -120,19 +120,29 @@ file from disk — an O(N) I/O pass.
 Workers are drawn from a bounded pool (`max_parallel_workers`) and pull pending chunks
 from shared state; `httpx` connection limits are set to match the pool size.
 
-EXP3.S mirror routing (`algorithms/mirror_bandit.py`) and straggler detection with
-range bisection (`algorithms/work_stealer.py`) are implemented and unit-tested but are
-**not yet called by the engine**.
+EXP3.S mirror routing (`algorithms/mirror_bandit.py`) and BL-DCS chunk sizing
+(`algorithms/adaptive_chunker.py`) reach the engine through `reliadl/scheduling.py`,
+which `download_engine.py` owns as a `TransferScheduler`. Both are opt-in: routing is
+enabled by `--adaptive-mirrors` (with one or more `--mirror`), sizing by
+`--adaptive-chunks`.
+
+Straggler detection with range bisection (`algorithms/work_stealer.py`) and the
+work-stealing deque (`algorithms/task_deque.py`) are implemented and unit-tested but
+are **not yet called by the engine**.
 
 ## 6. Error Recovery
 
 Transient failures are retried with exponential backoff and jitter
-(`download_engine.py:643-652`). A chunk that fails verification is discarded and
-re-fetched in full. Completed chunks are checkpointed to the resume state file, so an
-interrupted transfer resumes at chunk granularity rather than restarting.
+(`download_engine.py:643-652`). Completed chunks are checkpointed to the resume state
+file, so an interrupted transfer resumes at chunk granularity rather than restarting.
 
-There is no forward error correction and no sub-chunk corruption localization on the
-download path.
+A chunk that fails verification is re-fetched in full **unless** a manifest supplied
+per-sub-block digests, in which case the stream is abandoned at the first bad 64 KB
+sub-block, the verified prefix is kept, and only the remainder is re-requested
+(`download_engine.py:720`). See
+[TECHNICAL_SPECIFICATION.md](TECHNICAL_SPECIFICATION.md) §3.1.
+
+There is no forward error correction.
 
 
 ### 6.1 Error Propagation Flow

@@ -85,8 +85,20 @@ supported) computed incrementally over a 64 KB streaming buffer. Digests are com
 with `hmac.compare_digest`, which is constant-time. MD5 and SHA-1 are rejected by
 policy (`hash_verifier.py:30`).
 
-On a mismatch the **entire chunk is discarded and re-fetched**. There is currently no
-sub-chunk localization on the download path.
+What a mismatch costs depends on whether a manifest supplied per-sub-block digests.
+
+- **With sub-block digests.** The chunk is streamed through `SubBlockStreamValidator`
+  (`manifest.py`), built per chunk at `download_engine.py:720` via `_build_validator`.
+  Each 64 KB sub-block is checked as it completes, so the stream is abandoned at the
+  first bad block rather than after the whole range has arrived, the verified prefix is
+  kept, and the retry re-requests only from the bad sub-block onward.
+- **Without a manifest.** The entire chunk is discarded and re-fetched, and corruption
+  is attributable only to the chunk as a whole.
+
+The saving from localization is position-dependent, not uniform: bytes re-requested are
+`chunk_size - k * sub_block_size` for a corruption in sub-block `k`, so a corruption in
+the first sub-block saves nothing. See [ALGORITHMS.md](ALGORITHMS.md) §4 for the bound
+and the measurement.
 
 ### 3.2 Whole-File Verification
 
@@ -108,16 +120,28 @@ separation, `SHA-256(0x00 || leaf)` and `SHA-256(0x01 || left || right)`. Inclus
 proofs are available via `get_proof` / `verify_inclusion`. The root is carried in
 RFC 8785-canonicalized, Ed25519-signed manifests.
 
-**Known weakness.** Odd node counts duplicate the last node (`manifest.py:890`) and the
-root does not commit to the leaf count, so two different chunk lists can share a root
-(the CVE-2012-2459 shape). Since the root is signed, this must be fixed before the root
-is relied on as a security boundary.
+**Resolved weakness: second preimage via a duplicated tail.** Odd node counts pair the
+last node with itself, so the chunk lists `[a, b, c]` and `[a, b, c, c]` build identical
+internal nodes and therefore the same tree root (the CVE-2012-2459 shape). Because the
+manifest *signs* that root, one signature covered two different chunk sequences. The
+published root now commits to the leaf count:
 
-**Scope.** The tree is used by the manifest and by the offline `reliadl hash-tree`
-audit command. `SubBlockStreamValidator` (`manifest.py:1001-1160`) aborts a stream at
-the first bad 64 KB sub-block but has **no production call site**. Sub-chunk
-*localization* — binary search down the tree to the corrupt segments — is **not
-implemented**; earlier revisions of this document specified it as though it were.
+```
+root = SHA-256(0x02 || uint64_be(leaf_count) || tree_root)
+```
+
+implemented as `hash_root` in `reliadl/manifest.py`. The collision was verified to exist
+before the fix and to be closed after it
+(`tests/unit/test_merkle.py::test_second_preimage_duplicated_tail_rejected`). Binding the
+count was chosen over the Certificate Transparency promotion rule because it leaves the
+tree shape, and therefore every existing audit path, intact.
+
+**Scope.** The tree is used by the manifest and by the offline `reliadl hash-tree` audit
+command. `SubBlockStreamValidator` is on the live download path (§3.1). What is *not*
+implemented is binary search down the tree to locate corrupt segments: the engine checks
+sub-block digests directly, which is sufficient because the manifest is signed as a
+whole. `get_proof` / `verify_inclusion` remain available for offline audit and have no
+production call site.
 
 
 ## 4. State Management

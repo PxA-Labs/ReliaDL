@@ -22,3 +22,6 @@ Thumbs.db
 # MkDocs generated site
 site/
 .venv/
+
+# graphify knowledge graph output (regenerate with /graphify)
+graphify-out/

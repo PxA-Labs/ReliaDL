@@ -11,8 +11,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/PxA-Labs/ChunkGuard.git
-cd ChunkGuard
+git clone https://github.com/PxA-Labs/ReliaDL.git
+cd ReliaDL
 
 # Create virtual environment
 python -m venv .venv
@@ -97,7 +97,7 @@ perf(hash): use streaming hash to reduce peak memory usage
     - **PR Description**: Must be at least 30 characters and describe the changes without empty placeholders.
  4. Ensure PR metadata validation passes: No debug placeholders (`# TODO`, `# FIXME`, `placeholder_value_here`, `dummy_value`) in production code.
  5. Ensure all unit and integration tests pass: `python -m unittest discover -s tests` or `pytest -v`
- 6. Ensure code quality: `ruff check .` and `mypy src/`
+ 6. Ensure code quality: `ruff check .` and `mypy reliadl/`
  7. Update documentation in `docs/` and changelog if public APIs or behaviors change.
  8. Open a PR targeting `develop` (or `master` for hotfixes)
  9. Request review from CODEOWNERS maintainers
@@ -171,10 +171,10 @@ Install with: `pre-commit install`
 
 ### 5.1 Adding a New Module
 
-1. Create the module in `src/`
+1. Create the module in `reliadl/`
 2. Define its public interface (classes, functions, types)
 3. Add unit tests in `tests/unit/test_<module>.py`
-4. Import in `src/__init__.py` if part of public API
+4. Import in `reliadl/__init__.py` if part of public API
 5. Document in `docs/API_REFERENCE.md`
 
 ### 5.2 Modifying Existing Components
@@ -186,7 +186,7 @@ Install with: `pre-commit install`
 
 ### 5.3 Error Handling
 
-- Define custom exceptions in `src/exceptions.py`
+- Define custom exceptions in `reliadl/exceptions.py`
 - Never catch `Exception` or `BaseException` broadly
 - Include context in error messages (chunk_index, url, byte_range)
 - Classify errors as retryable or non-retryable
