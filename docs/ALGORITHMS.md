@@ -92,16 +92,20 @@ loss, grows the chunk towards its 64 MB ceiling, and starves the pool.
 Measured, 64 MB file, 4 workers, median of 5 seeds. The two arms were interleaved
 within one process so that drift in machine load fell on both equally:
 
-| Scenario | Floor off | Floor on | |
-| :--- | ---: | ---: | :--- |
-| clean | 28.3 MB/s | 46.6 MB/s | +65% |
-| heterogeneous | 25.1 MB/s | 45.3 MB/s | +80% |
-| failover | 3.6 MB/s | 8.9 MB/s | +145% |
-| lossy | 46.2 MB/s | 47.9 MB/s | +4% |
+| Scenario | Floor off | Floor on | Difference | 95% CI | sign test |
+| :--- | ---: | ---: | ---: | :--- | ---: |
+| clean | 29.0 MB/s | 52.0 MB/s | **+79.4%** | [+73.0, +88.3] | <0.0001 |
+| heterogeneous | 29.7 MB/s | 51.0 MB/s | **+73.9%** | [+71.3, +76.4] | <0.0001 |
+| failover | 3.6 MB/s | 9.0 MB/s | **+146.9%** | [+143.5, +150.6] | <0.0001 |
+| lossy | 45.8 MB/s | 49.4 MB/s | +15.6% | [+5.7, +26.6] | 0.20 |
 
-Reproduce with `python -m benchmarks.ablations.concurrency_floor --repetitions 5`.
+30 seeds, arms interleaved per seed. On `lossy` the interval on the mean excludes
+zero but the sign test does not, meaning the gain is concentrated in a minority
+of seeds rather than consistent; the other three are unambiguous.
 
-Unconstrained, the controller was around 40% *slower* than a fixed 4 MB chunk
+Reproduce with `python -m benchmarks.ablations.concurrency_floor --repetitions 30`.
+
+Unconstrained, the controller was around 44% *slower* than a fixed 4 MB chunk
 size, and on `failover` a single 32 MB chunk landing on the degraded mirror stalls
 everything queued behind it.
 
@@ -124,14 +128,19 @@ downloader unless constrained by the worker count, and showing the size of the
 error, is not something the chunk-sizing literature appears to cover.
 
 It should be read for exactly what it is, though. The floor repairs a large
-regression; it does not by itself make adaptive sizing a win. Against a fixed
-4 MB chunk the constrained controller now reaches parity or slightly better on
-all four scenarios (-0.5% to +5.8%), but several of those comparisons sit inside
-overlapping interquartile ranges over five seeds, so the supportable claim is
-"costs nothing here", not "beats a constant". The controller would have to earn
-its place on paths where a good fixed size is not known ahead of time, and a
-single file size with a single worker count cannot demonstrate that. See
-[EVALUATION.md](EVALUATION.md).
+regression; it is not the same thing as adaptive sizing being a win.
+
+Measured against a fixed 4 MB chunk over 30 interleaved pairs, the constrained
+controller is **indistinguishable on the three static paths** -- clean +1.3%,
+lossy -1.2%, heterogeneous +1.3%, every interval spanning zero -- and **reliably
+better on `failover`, +3.0% with a 95% interval of [+2.0, +3.7] and p < 0.0001**.
+
+That is the shape the design predicts rather than a disappointment. A fixed size
+is the right choice whenever a good size is knowable in advance; `failover` is
+the one scenario in this set where it is not, because the path degrades while
+the transfer runs. The controller earns its place there and nowhere else here,
+and demonstrating that it generalises would need a file-size and worker-count
+sweep this evaluation does not have. See [EVALUATION.md](EVALUATION.md).
 
 ### Open issues — do not cite this controller until these are resolved
 

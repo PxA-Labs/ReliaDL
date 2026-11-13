@@ -225,17 +225,19 @@ def fig_floor(out):
 
         python -m benchmarks.ablations.concurrency_floor --repetitions 5
 
-    and update the two lists below. Values recorded 2026-11-14, 5 seeds per arm,
-    64 MB payload, 4 workers, against the corrected BL-DCS loss term.
+    and update the three lists below. Values recorded 2026-11-14, 30 seeds per
+    arm, 64 MB payload, 4 workers, against the corrected BL-DCS loss term. The
+    lossy bar is the one to read carefully: its interval on the mean excludes
+    zero but its sign test does not, so the gain there is not consistent.
     """
     scenarios = ["clean", "heterog.", "failover", "lossy"]
-    off = [28.3, 25.1, 3.6, 46.2]
-    on = [46.6, 45.3, 8.9, 47.9]
+    off = [29.0, 29.7, 3.6, 45.8]
+    on = [52.0, 51.0, 9.0, 49.4]
     # Carried rather than recomputed from the rounded bar labels. On failover the
     # unrounded medians are 3.63 and 8.92, which is +145%; dividing the displayed
     # 8.9 by the displayed 3.6 gives +147%, and a figure that disagrees with its
     # own table by two points invites exactly the question it should not.
-    change = [64.6, 80.4, 145.4, 3.5]
+    change = [79.4, 73.9, 146.9, 15.6]
     x = np.arange(len(scenarios))
     w = 0.36
     fig, ax = plt.subplots(figsize=(COL, 1.85))

@@ -37,6 +37,7 @@ import statistics
 from pathlib import Path
 from typing import Optional
 
+from benchmarks.paired import bootstrap_ci, sign_test
 from benchmarks.runner import run_one
 from benchmarks.scenarios import SCENARIOS, Policy
 from reliadl.scheduling import TransferScheduler
@@ -93,11 +94,26 @@ def run(scenario_names, repetitions: int, base_seed: int):
 
         off = _median_goodput(arms["off"])
         on = _median_goodput(arms["on"])
+        # Per-seed pairs: the two arms ran back to back on the same seed, so the
+        # difference is what the constraint did rather than what the machine did.
+        pairs = [
+            (a.goodput_bps / MB, b.goodput_bps / MB)
+            # strict: one run per arm per seed, so a length mismatch is a bug.
+            for a, b in zip(arms["off"], arms["on"], strict=True)
+            if a.ok and a.verified and b.ok and b.verified
+        ]
+        rel = [(b - a) / a * 100.0 for a, b in pairs]
+        lo, hi = bootstrap_ci(rel) if len(rel) > 1 else (float("nan"), float("nan"))
+        _, _, _, p_value = sign_test([b - a for a, b in pairs])
         rows.append({
             "scenario": name,
             "floor_off_mbps": off,
             "floor_on_mbps": on,
             "change_pct": None if not off or not on else (on / off - 1.0) * 100.0,
+            "mean_rel_pct": sum(rel) / len(rel) if rel else None,
+            "ci95_rel_pct": [lo, hi],
+            "sign_test_p": p_value,
+            "pairs": len(pairs),
             "runs_off": sum(1 for r in arms["off"] if r.ok and r.verified),
             "runs_on": sum(1 for r in arms["on"] if r.ok and r.verified),
             "repetitions": repetitions,
@@ -118,14 +134,15 @@ def main() -> int:
 
     print(f"\nConcurrency floor A/B -- {args.repetitions} seeds per arm, interleaved")
     print("Median goodput over runs that completed and verified.\n")
-    print(f"  {'scenario':16s} {'floor off':>11s} {'floor on':>11s} {'change':>9s}  {'completed':>11s}")
-    print(f"  {'-' * 16} {'-' * 11} {'-' * 11} {'-' * 9}  {'-' * 11}")
+    print(f"  {'scenario':16s} {'floor off':>11s} {'floor on':>11s} {'mean diff':>10s} {'95% CI':>18s} {'p':>9s}")
+    print("  " + "-" * 70)
     for row in rows:
         off = "-" if row["floor_off_mbps"] is None else f"{row['floor_off_mbps']:.1f} MB/s"
         on = "-" if row["floor_on_mbps"] is None else f"{row['floor_on_mbps']:.1f} MB/s"
-        change = "-" if row["change_pct"] is None else f"{row['change_pct']:+.0f}%"
-        completed = f"{row['runs_off']}/{row['repetitions']} vs {row['runs_on']}/{row['repetitions']}"
-        print(f"  {row['scenario']:16s} {off:>11s} {on:>11s} {change:>9s}  {completed:>11s}")
+        mean = "-" if row.get("mean_rel_pct") is None else f"{row['mean_rel_pct']:+.1f}%"
+        lo, hi = row.get("ci95_rel_pct", [float("nan")] * 2)
+        ci = f"[{lo:+.1f}, {hi:+.1f}]"
+        print(f"  {row['scenario']:16s} {off:>11s} {on:>11s} {mean:>10s} {ci:>18s} {row.get('sign_test_p', 1.0):>9.4f}")
 
     if args.json:
         Path(args.json).write_text(json.dumps(rows, indent=2), encoding="utf-8")
