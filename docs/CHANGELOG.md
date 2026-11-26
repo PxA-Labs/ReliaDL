@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Raise to 30 seeds, and fix a confound that invalidated goodput comparisons
 - Inject corruption on whole-file GETs, and re-baseline at 30 reps
 - Fix the pull_request trigger so PR checks re-run on new commits
+- Centralize enforceable quality gates
 
 ### Changed
 - **v0.3.0**: Update documentation for v0.3.0 release and standardize formatting (#106)
