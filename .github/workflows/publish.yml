@@ -6,8 +6,13 @@ on:
   workflow_dispatch:
 
 jobs:
+  quality-gates:
+    name: Quality Gates
+    uses: ./.github/workflows/quality-gates.yml
+
   pypi-publish:
     name: Build and Publish to PyPI
+    needs: quality-gates
     runs-on: ubuntu-latest
     permissions:
       id-token: write  # Mandatory for PyPI Trusted Publisher OIDC authentication

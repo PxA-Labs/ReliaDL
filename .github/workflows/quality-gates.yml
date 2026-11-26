@@ -1,0 +1,115 @@
+name: Reusable Quality Gates
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-typecheck:
+    name: Lint & Type Safety
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Linting & Typing Tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff mypy pytest
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Lint (Ruff)
+        run: |
+          set -o pipefail
+          ruff check reliadl/ tests/ benchmarks/ 2>&1 | tee ruff-report.txt
+
+      - name: Type Checking (MyPy)
+        run: |
+          set -o pipefail
+          mypy 2>&1 | tee mypy-report.txt
+
+      - name: Upload Lint and Type Reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-lint-type-reports
+          path: |
+            ruff-report.txt
+            mypy-report.txt
+          if-no-files-found: ignore
+
+  test-suite:
+    name: Quality Test Suite (Python 3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Test Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run Quality Test Suite
+        run: |
+          set -o pipefail
+          python -m pytest --cov=reliadl --cov-report=xml --cov-report=term 2>&1 | tee test-report.txt
+
+      - name: Upload Test and Coverage Reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-test-reports
+          path: |
+            test-report.txt
+            coverage.xml
+          if-no-files-found: ignore
+
+  security-audit:
+    name: Dependency Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Run Security Audit (pip-audit)
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit
+          # Do not add a blanket ignore here. A temporary exception must name
+          # an individual vulnerability and be tracked with an owner and expiry.
+          set +e
+          pip-audit -r requirements.txt --format json --output pip-audit-report.json 2>&1 | tee pip-audit-report.txt
+          status=${PIPESTATUS[0]}
+          set -e
+          exit "$status"
+
+      - name: Upload Dependency Audit Reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-security-reports
+          path: |
+            pip-audit-report.txt
+            pip-audit-report.json
+          if-no-files-found: ignore

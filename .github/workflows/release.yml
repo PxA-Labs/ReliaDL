@@ -16,8 +16,13 @@ permissions:
   packages: write
 
 jobs:
+  quality-gates:
+    name: Quality Gates
+    uses: ./.github/workflows/quality-gates.yml
+
   build-and-release:
     name: Build Python Package & Publish Release Assets
+    needs: quality-gates
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
